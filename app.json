@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Scripture Swell",
+    "slug": "swell-bible",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#6B46C1"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.swellbible.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#6B46C1"
+      },
+      "package": "com.swellbible.app"
+    }
+  }
+}
