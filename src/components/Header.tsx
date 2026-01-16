@@ -15,7 +15,7 @@ export default function Header({ balance = 135.5 }: HeaderProps) {
           <Ionicons name="book" size={24} color={COLORS.secondary} />
         </View>
         <View>
-          <Text style={styles.title}>Scripture Swell</Text>
+          <Text style={styles.title}>Swell</Text>
           <Text style={styles.subtitle}>Read. Earn. Share.</Text>
         </View>
       </View>

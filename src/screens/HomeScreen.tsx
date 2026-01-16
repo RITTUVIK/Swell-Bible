@@ -49,7 +49,7 @@ export default function HomeScreen() {
             colors={[COLORS.primary, COLORS.primaryDark]}
             style={styles.welcomeCard}
           >
-            <Text style={styles.welcomeTitle}>Welcome to Scripture Swell</Text>
+            <Text style={styles.welcomeTitle}>Welcome to Swell</Text>
             <Text style={styles.welcomeText}>
               Read the Bible, earn SWELL tokens, and support the community spreading the Gospel.
             </Text>
