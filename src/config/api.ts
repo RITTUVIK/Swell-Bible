@@ -3,7 +3,7 @@
 
 export const BIBLE_API_CONFIG = {
   // TODO: Replace with your actual API key from https://scripture.api.bible/
-  API_KEY: 'YOUR_API_KEY_HERE',
+  API_KEY: 'QsMTeT91wdxIwx2DVlXcB',
   BASE_URL: 'https://api.scripture.api.bible/v1',
   
   // Default Bible version (ESV - English Standard Version)
