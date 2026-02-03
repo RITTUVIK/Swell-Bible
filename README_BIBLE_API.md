@@ -1,10 +1,10 @@
 # Bible API Integration Guide
 
-## 📖 Overview
+## Overview
 
 This app integrates with the [api.bible](https://docs.api.bible/) service to fetch Bible verses, chapters, and books.
 
-## 🔑 Getting Your API Key
+## Getting Your API Key
 
 1. Go to [https://scripture.api.bible/](https://scripture.api.bible/)
 2. Sign up for a free account
@@ -19,7 +19,7 @@ export const BIBLE_API_CONFIG = {
 };
 ```
 
-## 📂 File Structure
+## File Structure
 
 ```
 src/
@@ -36,7 +36,7 @@ src/
     └── bibleBooks.ts       # Book names and metadata
 ```
 
-## 🚀 Usage Examples
+## Usage Examples
 
 ### Basic: Fetch a Chapter
 
@@ -89,7 +89,7 @@ useEffect(() => {
 // chapters array contains all 50 chapters
 ```
 
-## 📚 API Methods
+## API Methods
 
 ### `bibleApi.getBooks()`
 Returns all 66 books of the Bible.
@@ -103,7 +103,7 @@ Returns full chapter content with HTML formatting.
 ### `bibleApi.parseChapterIntoVerses(chapterContent)`
 Parses chapter HTML into individual verse objects.
 
-## 🔄 Offline Storage (Future)
+## Offline Storage (Future)
 
 The `bibleStorage.ts` service is set up with placeholder methods for offline caching:
 
@@ -114,7 +114,7 @@ The `bibleStorage.ts` service is set up with placeholder methods for offline cac
 
 **TODO:** Implement with AsyncStorage or SQLite when ready.
 
-## 🎯 Next Steps
+## Next Steps
 
 1. **Get API Key** - Add your key to `src/config/api.ts`
 2. **Test Connection** - Try fetching Genesis 1
@@ -122,7 +122,7 @@ The `bibleStorage.ts` service is set up with placeholder methods for offline cac
 4. **Add Error Handling** - Show user-friendly error messages
 5. **Implement Offline Storage** - Cache chapters for offline reading
 
-## 📖 Available Bible Versions
+## Available Bible Versions
 
 Default is ESV. You can change `DEFAULT_BIBLE_ID` in `api.ts`:
 
@@ -133,14 +133,14 @@ Default is ESV. You can change `DEFAULT_BIBLE_ID` in `api.ts`:
 
 Get more IDs by calling `bibleApi.getBibles()`.
 
-## ⚠️ Important Notes
+## Important Notes
 
 - **Rate Limits**: Free tier has rate limits. Cache responses when possible.
 - **HTML Content**: API returns HTML-formatted text. We parse it to extract verses.
 - **Error Handling**: Always wrap API calls in try-catch blocks.
 - **Offline First**: Plan for offline reading - cache frequently accessed chapters.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 **"Failed to fetch" error:**
 - Check your API key is correct
