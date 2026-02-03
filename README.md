@@ -20,10 +20,12 @@ This IS:
 
 ## MVP Features
 
-- Display Bible text (starting with Genesis)
-- Track reading progress (local)
-- Earn SWELL tokens for reading (mocked)
-- Send SWELL tokens to other users as donations
+- **Bible reading**: Read screen shows sample Genesis 1 text; full [api.bible](https://docs.api.bible/) integration is in place (see `README_BIBLE_API.md` for setup).
+- **Reading progress**: Local progress tracking with verse-by-verse navigation.
+- **SWELL rewards**: Earn SWELL for reading (mocked in UI).
+- **Donations**: Send SWELL to other users (mocked in Community screen).
+
+App navigation: Home, Read, Community, Rewards (bottom tabs).
 
 Anything beyond this is out of scope.
 
@@ -38,12 +40,16 @@ Anything beyond this is out of scope.
 ## Project Structure
 
 ```
-app/
-  screens/
-  components/
+App.tsx                 # Entry point, bottom tab navigator
 src/
-  services/
-  data/
+  components/           # Header, SimpleHeader
+  config/              # API keys (api.ts)
+  constants/           # bibleBooks, colors
+  examples/            # ReadScreenExample (API usage)
+  hooks/               # useBible
+  screens/             # HomeScreen, ReadScreen, CommunityScreen, RewardsScreen
+  services/            # bibleApi, bibleStorage
+  types/               # bible.ts
 ```
 
 ## Getting Started
