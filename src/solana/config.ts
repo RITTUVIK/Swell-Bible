@@ -60,11 +60,9 @@ export const SWELL_MINT_ADDRESS = '3L3dY6ZQnZ68MKhFCYVZYhimAdWbuAREdsY5fhebcDao'
 export const SWELL_MINT = new PublicKey(SWELL_MINT_ADDRESS);
 
 /**
- * SWELL token decimals.
- * Most SPL tokens use 9 decimals (like SOL).
- * Adjust if SWELL uses a different decimal count.
+ * Decimals are fetched from chain via getSwellDecimals() in mint.ts and cached.
+ * Do not hardcode decimals here.
  */
-export const SWELL_DECIMALS = 9;
 
 // =============================================================================
 // TRANSACTION CONFIGURATION
