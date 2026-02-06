@@ -6,8 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import HomeScreen from './src/screens/HomeScreen';
 import ReadScreen from './src/screens/ReadScreen';
-import CommunityScreen from './src/screens/CommunityScreen';
-import RewardsScreen from './src/screens/RewardsScreen';
+import StewardshipScreen from './src/screens/StewardshipScreen';
 import { COLORS } from './src/constants/colors';
 
 const Tab = createBottomTabNavigator();
@@ -15,27 +14,27 @@ const Tab = createBottomTabNavigator();
 export default function App() {
   return (
     <>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <NavigationContainer>
         <Tab.Navigator
           screenOptions={{
             headerShown: false,
             tabBarStyle: {
-              backgroundColor: COLORS.background,
+              backgroundColor: COLORS.bg,
               borderTopWidth: 0,
               elevation: 0,
               height: 70,
               paddingBottom: 10,
               paddingTop: 10,
             },
-            tabBarActiveTintColor: COLORS.primary,
-            tabBarInactiveTintColor: '#9CA3AF',
+            tabBarActiveTintColor: COLORS.ink,
+            tabBarInactiveTintColor: COLORS.inkFaint,
             tabBarLabelStyle: {
-              fontSize: 12,
-              fontWeight: '600',
+              fontSize: 10,
+              letterSpacing: 1,
             },
             tabBarIconStyle: {
-              marginTop: 5,
+              marginTop: 4,
             },
           }}
         >
@@ -44,7 +43,7 @@ export default function App() {
             component={HomeScreen}
             options={{
               tabBarIcon: ({ color, size }) => (
-                <Ionicons name="home-outline" size={size} color={color} />
+                <Ionicons name="book-outline" size={size} color={color} />
               ),
             }}
           />
@@ -53,25 +52,16 @@ export default function App() {
             component={ReadScreen}
             options={{
               tabBarIcon: ({ color, size }) => (
-                <Ionicons name="book-outline" size={size} color={color} />
+                <Ionicons name="reader-outline" size={size} color={color} />
               ),
             }}
           />
           <Tab.Screen
-            name="Community"
-            component={CommunityScreen}
+            name="Stewardship"
+            component={StewardshipScreen}
             options={{
               tabBarIcon: ({ color, size }) => (
-                <Ionicons name="people-outline" size={size} color={color} />
-              ),
-            }}
-          />
-          <Tab.Screen
-            name="Rewards"
-            component={RewardsScreen}
-            options={{
-              tabBarIcon: ({ color, size }) => (
-                <Ionicons name="trophy-outline" size={size} color={color} />
+                <Ionicons name="wallet-outline" size={size} color={color} />
               ),
             }}
           />

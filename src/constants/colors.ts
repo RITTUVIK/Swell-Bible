@@ -1,31 +1,25 @@
 export const COLORS = {
-  // Primary colors from your design
-  primary: '#6B46C1',      // Purple
-  primaryDark: '#553399',
-  primaryLight: '#8B66E1',
-  
-  // Secondary colors
-  secondary: '#F59E0B',    // Gold/Orange
-  secondaryDark: '#D97706',
-  
-  // Accent colors
-  accent: '#10B981',       // Green for success
-  accentRed: '#EF4444',
-  
   // Background
-  background: '#FFF8E7',   // Cream
-  backgroundLight: '#FFFBF0',
-  
-  // Card colors
+  bg: '#F9F7F2',           // Clean off-white
+  bgLight: '#FCFBF7',      // Even lighter (reading surface)
+
+  // Ink / text
+  ink: '#1C1C1C',          // Soft black for high readability
+  inkLight: '#666666',     // Secondary text
+  inkFaint: '#999999',     // Tertiary / disabled text
+
+  // Accent
+  gold: '#A6894A',         // Subtle gold
+  goldLight: '#C4A96A',    // Light gold for borders/dividers
+  red: '#A62626',          // Traditional rubric red (muted)
+
+  // Surfaces
+  white: '#FCFCFC',
   card: '#FFFFFF',
-  cardBorder: '#F3E8D2',
-  
-  // Text colors
-  text: '#1F2937',
-  textLight: '#6B7280',
-  textPurple: '#6B46C1',
-  
+  border: '#EEEEEE',       // Ledger lines, subtle separators
+  borderLight: '#F2F2F2',  // Very faint separator
+
   // Utility
-  white: '#FFFFFF',
   black: '#000000',
+  transparent: 'transparent',
 } as const;
