@@ -1,15 +1,22 @@
 // API Configuration
+// API key is loaded from .env file (EXPO_PUBLIC_BIBLE_API_KEY)
 // Get your free API key from: https://scripture.api.bible/
 
+const apiKey = process.env.EXPO_PUBLIC_BIBLE_API_KEY || '';
+
+if (!apiKey) {
+  console.warn('BIBLE API KEY is missing! Set EXPO_PUBLIC_BIBLE_API_KEY in your .env file.');
+} else {
+  console.log('Bible API key loaded:', apiKey.substring(0, 1) + '...');
+}
+
 export const BIBLE_API_CONFIG = {
-  // TODO: Replace with your actual API key from https://scripture.api.bible/
-  API_KEY: 'QsMTeT91wdxIwx2DVlXcB',
-  BASE_URL: 'https://api.scripture.api.bible/v1',
-  
+  API_KEY: apiKey,
+  BASE_URL: 'https://rest.api.bible/v1',
+
   // Default Bible version (ESV - English Standard Version)
-  // You can change this to other versions like 'de4e12af7f28f599-02' (KJV)
   DEFAULT_BIBLE_ID: '06125adad2d5898a-01', // ESV
-  
+
   // Common Bible IDs:
   // ESV: '06125adad2d5898a-01'
   // KJV: 'de4e12af7f28f599-02'

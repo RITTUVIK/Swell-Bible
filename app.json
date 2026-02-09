@@ -4,6 +4,7 @@
     "slug": "swell-bible",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "swellbible",
     "userInterfaceStyle": "light",
     "splash": {
       "resizeMode": "contain",
@@ -21,6 +22,12 @@
         "backgroundColor": "#6B46C1"
       },
       "package": "com.swellbible.app"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "418f65d2-6219-4270-ab13-b5461b3ef0ff"
+      }
+    },
+    "owner": "mmmm7"
   }
 }

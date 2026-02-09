@@ -121,7 +121,9 @@ class BibleApiService {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch chapter: ${response.statusText}`);
+        const errorBody = await response.text();
+        console.error(`Chapter API error ${response.status}: ${errorBody}`);
+        throw new Error(`Failed to fetch chapter (${response.status}): ${response.statusText}`);
       }
 
       const data = await response.json();
@@ -156,7 +158,9 @@ class BibleApiService {
       );
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch verse: ${response.statusText}`);
+        const errorBody = await response.text();
+        console.error(`Verse API error ${response.status}: ${errorBody}`);
+        throw new Error(`Failed to fetch verse (${response.status}): ${response.statusText}`);
       }
 
       const data = await response.json();

@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BIBLE_BOOKS, type BibleBookInfo } from '../constants/bibleBooks';
 import { bibleApi } from '../services/bibleApi';
+import { BIBLE_API_CONFIG, getApiHeaders } from '../config/api';
 import { COLORS } from '../constants/colors';
 
 interface SearchResult {
@@ -58,8 +59,8 @@ export default function SearchScreen({ navigation }: any) {
 
     try {
       const response = await fetch(
-        `https://api.scripture.api.bible/v1/bibles/de4e12af7f28f599-02/search?query=${encodeURIComponent(query)}&limit=20`,
-        { headers: { 'api-key': 'QsMTeT91wdxIwx2DVlXcB' } }
+        `${BIBLE_API_CONFIG.BASE_URL}/bibles/${BIBLE_API_CONFIG.DEFAULT_BIBLE_ID}/search?query=${encodeURIComponent(query)}&limit=20`,
+        { headers: getApiHeaders() }
       );
 
       if (!response.ok) {

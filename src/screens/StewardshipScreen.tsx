@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,47 +9,27 @@ import {
   TextInput,
   Modal,
   ActivityIndicator,
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
-import { getSavedWallet, saveWallet, disconnectWallet } from '../services/walletContext';
+import {
+  getSavedWallet,
+  disconnectWallet,
+  createEmbeddedWallet,
+  getEmbeddedSecretKey,
+  saveExternalWallet,
+  WalletType,
+} from '../services/walletContext';
+import { connectPhantom, isPhantomInstalled } from '../services/phantomConnect';
 import { PublicKey } from '@solana/web3.js';
 import { getSwellBalance } from '../solana/balance';
 
 /**
- * Mission / parish data.
+ * Missions will be fetched from a real backend in the future.
  */
-const MISSIONS = [
-  {
-    id: 'paisios',
-    title: 'St. Paisios Monastery',
-    description: 'Support for the ongoing construction of the main catholicon and housing for the monastic brotherhood.',
-    funded: '70%',
-    wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU', // example recipient
-  },
-  {
-    id: 'orphanage',
-    title: 'Hope Orphanage Sustenance',
-    description: 'Monthly food and medical supplies for the children of the Holy Cross Mission.',
-    funded: '45%',
-    wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-  },
-  {
-    id: 'swahili',
-    title: 'Swahili Scripture Project',
-    description: 'Translation and printing of Orthodox prayer books and the New Testament into Swahili dialects.',
-    funded: '25%',
-    wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-  },
-  {
-    id: 'manuscript',
-    title: 'Ancient Manuscript Preservation',
-    description: 'Digital archiving and restorative care for 14th-century liturgical scrolls from Mount Athos.',
-    funded: '92%',
-    wallet: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
-  },
-];
+const MISSIONS: { id: string; title: string; description: string; funded: string; wallet: string }[] = [];
 
 interface DonateModalState {
   visible: boolean;
@@ -59,10 +39,12 @@ interface DonateModalState {
 
 export default function StewardshipScreen({ navigation }: any) {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  const [connectInput, setConnectInput] = useState('');
   const [showConnectModal, setShowConnectModal] = useState(false);
+  const [creatingWallet, setCreatingWallet] = useState(false);
+  const [connectingPhantom, setConnectingPhantom] = useState(false);
   const [donateModal, setDonateModal] = useState<DonateModalState>({
     visible: false,
     missionTitle: '',
@@ -83,6 +65,7 @@ export default function StewardshipScreen({ navigation }: any) {
     const wallet = await getSavedWallet();
     if (wallet.connected && wallet.address) {
       setWalletAddress(wallet.address);
+      setWalletType(wallet.type);
       fetchBalance(wallet.address);
     }
   };
@@ -94,28 +77,64 @@ export default function StewardshipScreen({ navigation }: any) {
       const result = await getSwellBalance(pubkey);
       setBalance(result.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     } catch {
-      // Solana RPC may not be available — show 0
       setBalance('0.00');
     } finally {
       setLoadingBalance(false);
     }
   };
 
-  const handleConnect = async () => {
-    const address = connectInput.trim();
-    if (!address || address.length < 32) {
-      Alert.alert('Invalid Address', 'Please enter a valid Solana wallet address.');
-      return;
-    }
-    await saveWallet(address);
-    setWalletAddress(address);
-    setShowConnectModal(false);
-    setConnectInput('');
-    fetchBalance(address);
-  };
+  // ---- Create Embedded Wallet ----
+  const handleCreateWallet = useCallback(async () => {
+    setCreatingWallet(true);
+    try {
+      const address = await createEmbeddedWallet();
+      setWalletAddress(address);
+      setWalletType('embedded');
+      setShowConnectModal(false);
+      fetchBalance(address);
 
+      // Show backup prompt
+      Alert.alert(
+        'Wallet Created',
+        `Your new wallet address:\n\n${address.slice(0, 16)}...${address.slice(-8)}\n\nIMPORTANT: Back up your private key from Settings to avoid losing access.`,
+        [{ text: 'Got it' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create wallet. Please try again.');
+    } finally {
+      setCreatingWallet(false);
+    }
+  }, []);
+
+  // ---- Connect Phantom ----
+  const handleConnectPhantom = useCallback(async () => {
+    setConnectingPhantom(true);
+    try {
+      const installed = await isPhantomInstalled();
+      if (!installed) {
+        Alert.alert(
+          'Phantom Not Installed',
+          'Phantom wallet needs to be installed on a real Android device (not an emulator).\n\nYou can use "Create New Wallet" instead, or install Phantom from the Google Play Store on a physical device.',
+          [{ text: 'OK' }]
+        );
+        return;
+      }
+      await connectPhantom();
+      setShowConnectModal(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to open Phantom wallet. Please try again.');
+    } finally {
+      setConnectingPhantom(false);
+    }
+  }, []);
+
+  // ---- Disconnect ----
   const handleDisconnect = () => {
-    Alert.alert('Disconnect Wallet', 'Remove your wallet from this app?', [
+    const message = walletType === 'embedded'
+      ? 'Disconnect your wallet? Make sure you have backed up your private key first.'
+      : 'Remove this wallet connection from the app?';
+
+    Alert.alert('Disconnect Wallet', message, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Disconnect',
@@ -123,12 +142,44 @@ export default function StewardshipScreen({ navigation }: any) {
         onPress: async () => {
           await disconnectWallet();
           setWalletAddress(null);
+          setWalletType(null);
           setBalance(null);
         },
       },
     ]);
   };
 
+  // ---- Copy Address ----
+  const handleCopyAddress = () => {
+    if (walletAddress) {
+      Clipboard.setString(walletAddress);
+      Alert.alert('Copied', 'Wallet address copied to clipboard.');
+    }
+  };
+
+  // ---- Export Key ----
+  const handleExportKey = async () => {
+    if (walletType !== 'embedded') return;
+    const secretKey = await getEmbeddedSecretKey();
+    if (secretKey) {
+      Alert.alert(
+        'Private Key Backup',
+        'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Copy Key',
+            onPress: () => {
+              Clipboard.setString(secretKey);
+              Alert.alert('Copied', 'Private key copied to clipboard. Store it somewhere safe.');
+            },
+          },
+        ]
+      );
+    }
+  };
+
+  // ---- Donate ----
   const handleDonate = (mission: typeof MISSIONS[0]) => {
     if (!walletAddress) {
       setShowConnectModal(true);
@@ -151,17 +202,18 @@ export default function StewardshipScreen({ navigation }: any) {
 
     Alert.alert(
       'Confirm Donation',
-      `Send ${amount} SWELL to ${donateModal.missionTitle}?\n\nNote: Transaction signing requires the Seeker wallet.`,
+      `Send ${amount} SWELL to ${donateModal.missionTitle}?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Send',
           onPress: () => {
             setDonateModal({ visible: false, missionTitle: '', missionWallet: '' });
-            Alert.alert(
-              'Wallet Required',
-              'SWELL transfers require the Seeker wallet SDK for transaction signing. This feature will be available when running on the Seeker phone.'
-            );
+            if (walletType === 'embedded') {
+              Alert.alert('Coming Soon', 'Transaction signing for embedded wallets is coming soon.');
+            } else {
+              Alert.alert('External Wallet', 'Please confirm the transaction in your wallet app.');
+            }
           },
         },
       ]
@@ -169,7 +221,7 @@ export default function StewardshipScreen({ navigation }: any) {
   };
 
   const shortAddress = walletAddress
-    ? `${walletAddress.slice(0, 4)}...${walletAddress.slice(-4)}`
+    ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : null;
 
   return (
@@ -205,12 +257,29 @@ export default function StewardshipScreen({ navigation }: any) {
                 <Text style={styles.balanceAmount}>{balance || '0.00'}</Text>
               )}
               <Text style={styles.balanceCurrency}>SWELL</Text>
-              <Text style={styles.walletBadge}>{shortAddress}</Text>
+
+              <TouchableOpacity onPress={handleCopyAddress} activeOpacity={0.6}>
+                <View style={styles.walletBadgeRow}>
+                  <Text style={styles.walletBadge}>{shortAddress}</Text>
+                  {walletType === 'embedded' && (
+                    <View style={styles.walletTypeBadge}>
+                      <Text style={styles.walletTypeText}>In-App</Text>
+                    </View>
+                  )}
+                  {walletType === 'external' && (
+                    <View style={[styles.walletTypeBadge, styles.walletTypeBadgeExternal]}>
+                      <Text style={styles.walletTypeText}>Phantom</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
 
               <View style={styles.actionRow}>
-                <TouchableOpacity style={styles.actionButton} activeOpacity={0.6}>
-                  <Text style={styles.actionText}>Deposit</Text>
-                </TouchableOpacity>
+                {walletType === 'embedded' && (
+                  <TouchableOpacity style={styles.actionButton} activeOpacity={0.6} onPress={handleExportKey}>
+                    <Text style={styles.actionText}>Backup Key</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={styles.actionButton}
                   activeOpacity={0.6}
@@ -224,9 +293,10 @@ export default function StewardshipScreen({ navigation }: any) {
             </>
           ) : (
             <>
+              <Ionicons name="wallet-outline" size={48} color={COLORS.inkFaint} style={{ marginBottom: 16 }} />
               <Text style={styles.balanceLabel}>Connect Your Wallet</Text>
               <Text style={styles.connectDesc}>
-                Link your Solana wallet to view your SWELL balance and donate to missions.
+                Create a new wallet or connect an existing one to manage your SWELL tokens.
               </Text>
               <TouchableOpacity
                 style={styles.connectButton}
@@ -234,7 +304,7 @@ export default function StewardshipScreen({ navigation }: any) {
                 onPress={() => setShowConnectModal(true)}
               >
                 <Ionicons name="wallet-outline" size={18} color={COLORS.white} />
-                <Text style={styles.connectButtonText}>Connect Wallet</Text>
+                <Text style={styles.connectButtonText}>Get Started</Text>
               </TouchableOpacity>
             </>
           )}
@@ -244,46 +314,52 @@ export default function StewardshipScreen({ navigation }: any) {
         <View style={styles.missionsSection}>
           <Text style={styles.missionsLabel}>Active Missions & Parishes</Text>
 
-          {MISSIONS.map((mission, idx) => (
-            <View
-              key={mission.id}
-              style={[
-                styles.missionRow,
-                idx < MISSIONS.length - 1 && styles.missionBorder,
-              ]}
-            >
-              <View style={styles.missionContent}>
-                <Text style={styles.missionTitle}>{mission.title}</Text>
-                <Text style={styles.missionDescription}>
-                  {mission.description}
-                </Text>
-              </View>
-              <View style={styles.missionRight}>
-                <Text style={styles.fundedText}>{mission.funded} Funded</Text>
-                <TouchableOpacity
-                  style={styles.donateButton}
-                  activeOpacity={0.6}
-                  onPress={() => handleDonate(mission)}
-                >
-                  <Text style={styles.donateText}>Donate</Text>
-                </TouchableOpacity>
-              </View>
+          {MISSIONS.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="heart-outline" size={40} color={COLORS.inkFaint} />
+              <Text style={styles.emptyStateTitle}>No Active Missions</Text>
+              <Text style={styles.emptyStateDesc}>
+                Missions and parishes will appear here once they are available.
+              </Text>
             </View>
-          ))}
-
-          <TouchableOpacity style={styles.viewRegistry} activeOpacity={0.5}>
-            <Text style={styles.viewRegistryText}>View Full Registry</Text>
-          </TouchableOpacity>
+          ) : (
+            MISSIONS.map((mission, idx) => (
+              <View
+                key={mission.id}
+                style={[
+                  styles.missionRow,
+                  idx < MISSIONS.length - 1 && styles.missionBorder,
+                ]}
+              >
+                <View style={styles.missionContent}>
+                  <Text style={styles.missionTitle}>{mission.title}</Text>
+                  <Text style={styles.missionDescription}>
+                    {mission.description}
+                  </Text>
+                </View>
+                <View style={styles.missionRight}>
+                  <Text style={styles.fundedText}>{mission.funded} Funded</Text>
+                  <TouchableOpacity
+                    style={styles.donateButton}
+                    activeOpacity={0.6}
+                    onPress={() => handleDonate(mission)}
+                  >
+                    <Text style={styles.donateText}>Donate</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ))
+          )}
         </View>
       </ScrollView>
 
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={styles.footerLabel}>Total Distributed to Date</Text>
-        <Text style={styles.footerAmount}>142,800 SWELL</Text>
+        <Text style={styles.footerAmount}>0 SWELL</Text>
       </View>
 
-      {/* Connect Wallet Modal */}
+      {/* ===== CONNECT WALLET MODAL ===== */}
       <Modal
         visible={showConnectModal}
         transparent
@@ -292,40 +368,73 @@ export default function StewardshipScreen({ navigation }: any) {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Connect Wallet</Text>
-            <Text style={styles.modalDesc}>
-              Enter your Solana wallet address to view your SWELL balance.
-            </Text>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="Solana wallet address"
-              placeholderTextColor={COLORS.inkFaint}
-              value={connectInput}
-              onChangeText={setConnectInput}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancel}
-                onPress={() => setShowConnectModal(false)}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalConfirm}
-                onPress={handleConnect}
-                activeOpacity={0.6}
-              >
-                <Text style={styles.modalConfirmText}>Connect</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Connect Wallet</Text>
+              <TouchableOpacity onPress={() => setShowConnectModal(false)} activeOpacity={0.6}>
+                <Ionicons name="close" size={22} color={COLORS.inkLight} />
               </TouchableOpacity>
             </View>
+            <Text style={styles.modalDesc}>
+              Choose how you'd like to connect your Solana wallet.
+            </Text>
+
+            {/* Option 1: Create Embedded Wallet */}
+            <TouchableOpacity
+              style={styles.walletOption}
+              activeOpacity={0.7}
+              onPress={handleCreateWallet}
+              disabled={creatingWallet}
+            >
+              <View style={styles.walletOptionIcon}>
+                <Ionicons name="add-circle-outline" size={28} color={COLORS.ink} />
+              </View>
+              <View style={styles.walletOptionContent}>
+                <Text style={styles.walletOptionTitle}>Create New Wallet</Text>
+                <Text style={styles.walletOptionDesc}>
+                  Generate a new Solana wallet right in the app. No other apps needed.
+                </Text>
+              </View>
+              {creatingWallet ? (
+                <ActivityIndicator size="small" color={COLORS.ink} />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color={COLORS.inkFaint} />
+              )}
+            </TouchableOpacity>
+
+            {/* Option 2: Connect Phantom */}
+            <TouchableOpacity
+              style={styles.walletOption}
+              activeOpacity={0.7}
+              onPress={handleConnectPhantom}
+              disabled={connectingPhantom}
+            >
+              <View style={[styles.walletOptionIcon, styles.phantomIcon]}>
+                <Ionicons name="flash-outline" size={28} color="#AB9FF2" />
+              </View>
+              <View style={styles.walletOptionContent}>
+                <Text style={styles.walletOptionTitle}>Connect Phantom</Text>
+                <Text style={styles.walletOptionDesc}>
+                  Link your existing Phantom wallet via mobile app.
+                </Text>
+              </View>
+              {connectingPhantom ? (
+                <ActivityIndicator size="small" color="#AB9FF2" />
+              ) : (
+                <Ionicons name="chevron-forward" size={20} color={COLORS.inkFaint} />
+              )}
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View style={styles.modalDivider} />
+
+            <Text style={styles.modalFooterNote}>
+              Your keys are stored locally on this device and never shared.
+            </Text>
           </View>
         </View>
       </Modal>
 
-      {/* Donate Modal */}
+      {/* ===== DONATE MODAL ===== */}
       <Modal
         visible={donateModal.visible}
         transparent
@@ -436,16 +545,37 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     marginTop: 4,
   },
+  walletBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
   walletBadge: {
     fontSize: 11,
     color: COLORS.inkFaint,
     letterSpacing: 1,
-    marginTop: 8,
     backgroundColor: COLORS.borderLight,
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
     overflow: 'hidden',
+  },
+  walletTypeBadge: {
+    backgroundColor: COLORS.ink,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  walletTypeBadgeExternal: {
+    backgroundColor: '#AB9FF2',
+  },
+  walletTypeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: COLORS.white,
   },
   actionRow: {
     flexDirection: 'row',
@@ -552,15 +682,23 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: COLORS.ink,
   },
-  viewRegistry: {
+  emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 48,
   },
-  viewRegistryText: {
-    fontSize: 12,
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: '700',
     color: COLORS.inkLight,
-    textDecorationLine: 'underline',
-    textDecorationColor: COLORS.border,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  emptyStateDesc: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: COLORS.inkFaint,
+    textAlign: 'center',
+    paddingHorizontal: 24,
   },
 
   // Footer
@@ -589,7 +727,7 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
   },
 
-  // Modals
+  // Modal shared
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.4)',
@@ -604,6 +742,12 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 360,
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
@@ -614,8 +758,59 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 22,
     color: COLORS.inkLight,
-    marginBottom: 20,
+    marginBottom: 24,
   },
+  modalDivider: {
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+    marginVertical: 16,
+  },
+  modalFooterNote: {
+    fontSize: 12,
+    color: COLORS.inkFaint,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+
+  // Wallet options
+  walletOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  walletOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.borderLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  phantomIcon: {
+    backgroundColor: '#F0EDFF',
+  },
+  walletOptionContent: {
+    flex: 1,
+  },
+  walletOptionTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.ink,
+    marginBottom: 2,
+  },
+  walletOptionDesc: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: COLORS.inkLight,
+  },
+
+  // Donate modal inputs
   modalInput: {
     borderWidth: 1,
     borderColor: COLORS.border,
