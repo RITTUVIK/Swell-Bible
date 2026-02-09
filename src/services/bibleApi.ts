@@ -138,10 +138,18 @@ class BibleApiService {
    */
   async getVerse(verseId: string, bibleId?: string): Promise<Verse> {
     const id = bibleId || this.defaultBibleId;
-    
+
     try {
+      const params = new URLSearchParams({
+        'content-type': 'text',
+        'include-notes': 'false',
+        'include-titles': 'false',
+        'include-chapter-numbers': 'false',
+        'include-verse-numbers': 'false',
+      });
+
       const response = await fetch(
-        `${this.baseUrl}/bibles/${id}/verses/${verseId}`,
+        `${this.baseUrl}/bibles/${id}/verses/${verseId}?${params.toString()}`,
         {
           headers: getApiHeaders(),
         }
@@ -165,46 +173,87 @@ class BibleApiService {
    */
   parseChapterIntoVerses(chapterContent: ChapterContent): Verse[] {
     const verses: Verse[] = [];
-    
-    // The API returns content as HTML with verse numbers
-    // We'll parse it to extract individual verses
-    // This is a simplified parser - you may need to adjust based on actual API response format
-    
     const content = chapterContent.content;
-    const verseRegex = /<span data-number="(\d+)"[^>]*>(.*?)<\/span>/g;
-    let match;
-    let verseNumber = 1;
 
-    while ((match = verseRegex.exec(content)) !== null) {
+    // Try HTML parsing first (if API returned HTML despite text request)
+    const htmlRegex = /<span data-number="(\d+)"[^>]*>(.*?)<\/span>/gs;
+    let match;
+
+    while ((match = htmlRegex.exec(content)) !== null) {
       const verseNum = parseInt(match[1], 10);
       const verseText = match[2]
-        .replace(/<[^>]+>/g, '') // Remove HTML tags
+        .replace(/<[^>]+>/g, '')
         .trim();
 
-      verses.push({
-        id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
-        bibleId: chapterContent.bibleId,
-        bookId: chapterContent.bookId,
-        chapterId: chapterContent.id,
-        reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
-        content: verseText,
-      });
-
-      verseNumber = verseNum;
-    }
-
-    // If regex parsing fails, fallback to splitting by verse numbers
-    if (verses.length === 0) {
-      const lines = content.split(/\d+/).filter(line => line.trim());
-      lines.forEach((line, index) => {
+      if (verseText) {
         verses.push({
-          id: `${chapterContent.bookId}.${chapterContent.number}.${index + 1}`,
+          id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
           bibleId: chapterContent.bibleId,
           bookId: chapterContent.bookId,
           chapterId: chapterContent.id,
-          reference: `${chapterContent.bookId} ${chapterContent.number}:${index + 1}`,
-          content: line.replace(/<[^>]+>/g, '').trim(),
+          reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
+          content: verseText,
         });
+      }
+    }
+
+    if (verses.length > 0) return verses;
+
+    // Plain text format: verse numbers appear as [1] or just standalone numbers
+    // Try splitting by [number] pattern first
+    const bracketParts = content.split(/\[(\d+)\]/);
+    if (bracketParts.length > 2) {
+      for (let i = 1; i < bracketParts.length; i += 2) {
+        const verseNum = parseInt(bracketParts[i], 10);
+        const verseText = (bracketParts[i + 1] || '')
+          .replace(/<[^>]+>/g, '')
+          .trim();
+        if (verseText) {
+          verses.push({
+            id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
+            bibleId: chapterContent.bibleId,
+            bookId: chapterContent.bookId,
+            chapterId: chapterContent.id,
+            reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
+            content: verseText,
+          });
+        }
+      }
+      if (verses.length > 0) return verses;
+    }
+
+    // Fallback: split on standalone verse numbers (newline or space then number)
+    const cleanContent = content.replace(/<[^>]+>/g, '').trim();
+    // Match patterns like "\n1 " or beginning "1 "
+    const textParts = cleanContent.split(/(?:^|\n)\s*(\d+)\s+/);
+    if (textParts.length > 2) {
+      for (let i = 1; i < textParts.length; i += 2) {
+        const verseNum = parseInt(textParts[i], 10);
+        const verseText = (textParts[i + 1] || '').replace(/\n/g, ' ').trim();
+        if (verseText) {
+          verses.push({
+            id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
+            bibleId: chapterContent.bibleId,
+            bookId: chapterContent.bookId,
+            chapterId: chapterContent.id,
+            reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
+            content: verseText,
+          });
+        }
+      }
+      if (verses.length > 0) return verses;
+    }
+
+    // Last resort: treat the whole content as one verse
+    const wholeText = cleanContent.trim();
+    if (wholeText) {
+      verses.push({
+        id: `${chapterContent.bookId}.${chapterContent.number}.1`,
+        bibleId: chapterContent.bibleId,
+        bookId: chapterContent.bookId,
+        chapterId: chapterContent.id,
+        reference: `${chapterContent.bookId} ${chapterContent.number}:1`,
+        content: wholeText,
       });
     }
 

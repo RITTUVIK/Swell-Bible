@@ -1,203 +1,302 @@
-import React from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useBible } from '../hooks/useBible';
+import { getBookById, BIBLE_BOOKS } from '../constants/bibleBooks';
+import { saveReadingPosition } from '../services/readingProgress';
+import { addBookmark } from '../services/bookmarks';
+import { getSettings } from '../services/settings';
 import { COLORS } from '../constants/colors';
 
-/**
- * Verses for John 1:1-14 (KJV), matching the HTML mockup.
- * Each entry is { num, text }.
- */
-const VERSES = [
-  { num: 1, text: 'In the beginning was the Word, and the Word was with God, and the Word was God.' },
-  { num: 2, text: 'The same was in the beginning with God.' },
-  { num: 3, text: 'All things were made by him; and without him was not any thing made that was made.' },
-  { num: 4, text: 'In him was life; and the life was the light of men.' },
-  { num: 5, text: 'And the light shineth in darkness; and the darkness comprehended it not.' },
-  { num: 6, text: 'There was a man sent from God, whose name was John.' },
-  { num: 7, text: 'The same came for a witness, to bear witness of the Light, that all men through him might believe.' },
-  { num: 8, text: 'He was not that Light, but was sent to bear witness of that Light.' },
-  { num: 9, text: 'That was the true Light, which lighteth every man that cometh into the world.' },
-  { num: 10, text: 'He was in the world, and the world was made by him, and the world knew him not.' },
-  { num: 11, text: 'He came unto his own, and his own received him not.' },
-  { num: 12, text: 'But as many as received him, to them gave he power to become the sons of God, even to them that believe on his name:' },
-  { num: 13, text: 'Which were born, not of blood, nor of the will of the flesh, nor of the will of man, but of God.' },
-  { num: 14, text: 'And the Word was made flesh, and dwelt among us, (and we beheld his glory, the glory as of the only begotten of the Father,) full of grace and truth.' },
-];
+interface ReadScreenProps {
+  route?: { params?: { bookId?: string; chapter?: number } };
+  navigation?: any;
+}
 
-/**
- * Group consecutive verses into paragraphs for natural reading flow.
- * Each group is an array of verse objects displayed as one paragraph.
- */
-const PARAGRAPHS = [
-  VERSES.slice(0, 3),   // v1-3
-  VERSES.slice(3, 5),   // v4-5
-  VERSES.slice(5, 8),   // v6-8
-  VERSES.slice(8, 11),  // v9-11
-  VERSES.slice(11, 13), // v12-13
-  VERSES.slice(13, 14), // v14
-];
+export default function ReadScreen({ route, navigation }: ReadScreenProps) {
+  const bookId = route?.params?.bookId || 'JHN';
+  const initialChapter = route?.params?.chapter || 1;
 
-export default function ReadScreen() {
+  const [currentBookId, setCurrentBookId] = useState(bookId);
+  const [currentChapter, setCurrentChapter] = useState(initialChapter);
+  const [fontSize, setFontSize] = useState(19);
+  const [bibleVersionId, setBibleVersionId] = useState<string | undefined>(undefined);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const {
+    fetchChapter,
+    chapterContent,
+    verses,
+    loadingChapter,
+    error,
+    getChapterId,
+  } = useBible({ bibleId: bibleVersionId });
+
+  const bookInfo = getBookById(currentBookId);
+  const bookName = bookInfo?.name || currentBookId;
+  const totalChapters = bookInfo?.chapters || 1;
+
+  // Load settings
+  useEffect(() => {
+    getSettings().then((s) => {
+      setFontSize(s.fontSize);
+      setBibleVersionId(s.bibleVersionId);
+    });
+  }, []);
+
+  // Reload settings when screen is focused
+  useEffect(() => {
+    const unsub = navigation?.addListener?.('focus', () => {
+      getSettings().then((s) => {
+        setFontSize(s.fontSize);
+        setBibleVersionId(s.bibleVersionId);
+      });
+    });
+    return unsub;
+  }, [navigation]);
+
+  const loadChapter = useCallback(() => {
+    const chapterId = getChapterId(currentBookId, String(currentChapter));
+    fetchChapter(chapterId);
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    saveReadingPosition(currentBookId, currentChapter);
+  }, [currentBookId, currentChapter, getChapterId, fetchChapter]);
+
+  useEffect(() => {
+    loadChapter();
+  }, [loadChapter]);
+
+  useEffect(() => {
+    if (route?.params?.bookId) {
+      setCurrentBookId(route.params.bookId);
+      setCurrentChapter(route.params.chapter || 1);
+    }
+  }, [route?.params?.bookId, route?.params?.chapter]);
+
+  const goToNext = () => {
+    if (chapterContent?.next) {
+      setCurrentBookId(chapterContent.next.bookId);
+      setCurrentChapter(parseInt(chapterContent.next.number, 10));
+    } else if (currentChapter < totalChapters) {
+      setCurrentChapter((prev) => prev + 1);
+    } else {
+      const idx = BIBLE_BOOKS.findIndex((b) => b.id === currentBookId);
+      if (idx < BIBLE_BOOKS.length - 1) {
+        setCurrentBookId(BIBLE_BOOKS[idx + 1].id);
+        setCurrentChapter(1);
+      }
+    }
+  };
+
+  const goToPrevious = () => {
+    if (chapterContent?.previous) {
+      setCurrentBookId(chapterContent.previous.bookId);
+      setCurrentChapter(parseInt(chapterContent.previous.number, 10));
+    } else if (currentChapter > 1) {
+      setCurrentChapter((prev) => prev - 1);
+    } else {
+      const idx = BIBLE_BOOKS.findIndex((b) => b.id === currentBookId);
+      if (idx > 0) {
+        const prevBook = BIBLE_BOOKS[idx - 1];
+        setCurrentBookId(prevBook.id);
+        setCurrentChapter(prevBook.chapters);
+      }
+    }
+  };
+
+  const handleVerseLongPress = (verse: typeof verses[0]) => {
+    const parts = verse.id.split('.');
+    const verseNum = parts[parts.length - 1];
+    const ref = `${bookName} ${currentChapter}:${verseNum}`;
+
+    Alert.alert('Bookmark Verse', `Save "${ref}" to bookmarks?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Bookmark',
+        onPress: () => {
+          addBookmark({
+            verseId: verse.id,
+            bookId: currentBookId,
+            chapterId: verse.chapterId,
+            reference: ref,
+            content: verse.content,
+            timestamp: Date.now(),
+          });
+        },
+      },
+    ]);
+  };
+
+  const groupVersesIntoParagraphs = (allVerses: typeof verses) => {
+    if (allVerses.length === 0) return [];
+    const paragraphs: (typeof verses)[] = [];
+    let current: typeof verses = [];
+    for (let i = 0; i < allVerses.length; i++) {
+      current.push(allVerses[i]);
+      if (current.length >= 3 || i === allVerses.length - 1) {
+        paragraphs.push(current);
+        current = [];
+      }
+    }
+    return paragraphs;
+  };
+
+  if (loadingChapter) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color={COLORS.red} />
+        <Text style={styles.loadingText}>Loading scripture...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Unable to load chapter</Text>
+        <Text style={styles.errorHint}>{error}</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={loadChapter}>
+          <Text style={styles.retryText}>Try Again</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  const paragraphs = groupVersesIntoParagraphs(verses);
+  const hasPrevious = currentChapter > 1 || BIBLE_BOOKS.findIndex((b) => b.id === currentBookId) > 0;
+  const hasNext = currentChapter < totalChapters || BIBLE_BOOKS.findIndex((b) => b.id === currentBookId) < BIBLE_BOOKS.length - 1;
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.headerTouchable}
+          activeOpacity={0.6}
+          onPress={() => navigation?.navigate?.('Library')}
+        >
+          <Text style={styles.headerBookName}>{bookName} {currentChapter}</Text>
+          <Ionicons name="chevron-down" size={14} color={COLORS.inkLight} style={{ marginLeft: 4 }} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          activeOpacity={0.6}
+          onPress={() => navigation?.navigate?.('Settings')}
+        >
+          <Ionicons name="settings-outline" size={20} color={COLORS.inkLight} />
+        </TouchableOpacity>
+      </View>
+
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
         {/* Chapter heading */}
         <View style={styles.chapterHeader}>
-          <Text style={styles.chapterTitle}>Chapter 1</Text>
+          <Text style={[styles.chapterTitle, { fontFamily: 'Lora_700Bold' }]}>
+            Chapter {currentChapter}
+          </Text>
           <View style={styles.divider} />
         </View>
 
         {/* Scripture body */}
         <View style={styles.body}>
-          {PARAGRAPHS.map((paragraph, pIdx) => (
-            <Text key={pIdx} style={styles.paragraph}>
-              {paragraph.map((verse) => (
-                <Text key={verse.num}>
-                  <Text style={styles.verseNum}>{verse.num} </Text>
-                  <Text style={styles.verseText}>{verse.text} </Text>
-                </Text>
-              ))}
+          {paragraphs.map((paragraph, pIdx) => (
+            <Text key={pIdx} style={[styles.paragraph, { fontSize, lineHeight: fontSize * 1.9 }]}>
+              {paragraph.map((verse) => {
+                const parts = verse.id.split('.');
+                const verseNum = parts[parts.length - 1];
+                return (
+                  <Text
+                    key={verse.id}
+                    onLongPress={() => handleVerseLongPress(verse)}
+                  >
+                    <Text style={styles.verseNum}>{verseNum} </Text>
+                    <Text style={[styles.verseText, { fontSize, lineHeight: fontSize * 1.9, fontFamily: 'Lora_400Regular' }]}>
+                      {verse.content}{' '}
+                    </Text>
+                  </Text>
+                );
+              })}
             </Text>
           ))}
         </View>
 
         {/* Previous / Next */}
         <View style={styles.navRow}>
-          <TouchableOpacity activeOpacity={0.5}>
-            <Text style={styles.navText}>Previous</Text>
-          </TouchableOpacity>
+          {hasPrevious ? (
+            <TouchableOpacity activeOpacity={0.5} onPress={goToPrevious}>
+              <Text style={styles.navText}>Previous</Text>
+            </TouchableOpacity>
+          ) : <View />}
           <Text style={styles.navDot}>{'\u25CF'}</Text>
-          <TouchableOpacity activeOpacity={0.5}>
-            <Text style={styles.navText}>Next</Text>
-          </TouchableOpacity>
+          {hasNext ? (
+            <TouchableOpacity activeOpacity={0.5} onPress={goToNext}>
+              <Text style={styles.navText}>Next</Text>
+            </TouchableOpacity>
+          ) : <View />}
         </View>
       </ScrollView>
 
       {/* Alms floating button */}
       <View style={styles.almsContainer}>
-        <TouchableOpacity style={styles.almsButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.almsButton}
+          activeOpacity={0.7}
+          onPress={() => navigation?.navigate?.('Stewardship')}
+        >
           <Text style={styles.almsIcon}>{'\u2665'}</Text>
           <Text style={styles.almsLabel}>Alms (SWELL)</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
+  container: { flex: 1, backgroundColor: COLORS.bgLight },
+  header: {
+    paddingBottom: 12,
+    paddingHorizontal: 24,
     backgroundColor: COLORS.bgLight,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 32,
-    paddingTop: 80,
-    paddingBottom: 120,
-  },
-
-  // Chapter heading
-  chapterHeader: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  chapterTitle: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: COLORS.ink,
-    marginBottom: 16,
-  },
-  divider: {
-    width: 48,
-    height: 1,
-    backgroundColor: COLORS.red,
-    opacity: 0.3,
-  },
-
-  // Scripture body
-  body: {
-    marginBottom: 40,
-  },
-  paragraph: {
-    fontSize: 19,
-    lineHeight: 36,
-    color: COLORS.ink,
-    opacity: 0.9,
-    marginBottom: 24,
-  },
-  verseNum: {
-    fontSize: 10,
-    color: COLORS.inkFaint,
-    opacity: 0.5,
-  },
-  verseText: {
-    fontSize: 19,
-    lineHeight: 36,
-    color: COLORS.ink,
-    opacity: 0.9,
-  },
-
-  // Navigation
-  navRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 32,
-    marginTop: 20,
-    marginBottom: 20,
-  },
-  navText: {
-    fontSize: 11,
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    color: COLORS.inkFaint,
-    opacity: 0.5,
-  },
-  navDot: {
-    fontSize: 6,
-    color: COLORS.red,
-    opacity: 0.2,
-  },
-
-  // Alms button
-  almsContainer: {
-    position: 'absolute',
-    bottom: 24,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-  },
-  almsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.7)',
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    gap: 8,
+    justifyContent: 'space-between',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: COLORS.border,
   },
-  almsIcon: {
-    fontSize: 14,
-    color: COLORS.red,
-    opacity: 0.7,
-  },
-  almsLabel: {
-    fontSize: 12,
-    fontWeight: '500',
-    letterSpacing: 1,
-    color: COLORS.inkLight,
-  },
+  headerTouchable: { flexDirection: 'row', alignItems: 'center' },
+  headerBookName: { fontSize: 14, fontWeight: '600', letterSpacing: 1, color: COLORS.ink },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 32, paddingTop: 32, paddingBottom: 120 },
+  loadingContainer: { flex: 1, backgroundColor: COLORS.bgLight, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
+  loadingText: { marginTop: 16, fontSize: 14, color: COLORS.inkLight, letterSpacing: 1 },
+  errorText: { fontSize: 18, fontWeight: '600', color: COLORS.ink, marginBottom: 8 },
+  errorHint: { fontSize: 14, color: COLORS.inkLight, textAlign: 'center', marginBottom: 24, lineHeight: 22 },
+  retryButton: { borderWidth: 1, borderColor: COLORS.ink, paddingHorizontal: 24, paddingVertical: 10 },
+  retryText: { fontSize: 12, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', color: COLORS.ink },
+  chapterHeader: { alignItems: 'center', marginBottom: 40 },
+  chapterTitle: { fontSize: 32, fontWeight: '700', color: COLORS.ink, marginBottom: 16 },
+  divider: { width: 48, height: 1, backgroundColor: COLORS.red, opacity: 0.3 },
+  body: { marginBottom: 40 },
+  paragraph: { fontSize: 19, lineHeight: 36, color: COLORS.ink, opacity: 0.9, marginBottom: 24 },
+  verseNum: { fontSize: 10, color: COLORS.inkFaint, opacity: 0.5 },
+  verseText: { fontSize: 19, lineHeight: 36, color: COLORS.ink, opacity: 0.9 },
+  navRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 32, marginTop: 20, marginBottom: 20 },
+  navText: { fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: COLORS.inkFaint, opacity: 0.5 },
+  navDot: { fontSize: 6, color: COLORS.red, opacity: 0.2 },
+  almsContainer: { position: 'absolute', bottom: 24, left: 0, right: 0, alignItems: 'center' },
+  almsButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.7)', borderWidth: 1, borderColor: COLORS.border, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 24, gap: 8 },
+  almsIcon: { fontSize: 14, color: COLORS.red, opacity: 0.7 },
+  almsLabel: { fontSize: 12, fontWeight: '500', letterSpacing: 1, color: COLORS.inkLight },
 });

@@ -1,90 +1,114 @@
-/**
- * Bible Storage Service
- * 
- * This service will handle offline storage of Bible chapters and verses.
- * Currently, this is a placeholder structure - full implementation will be added later.
- * 
- * Future implementation will use:
- * - AsyncStorage or SQLite for local storage
- * - Caching strategy for recently read chapters
- * - Background sync when online
- * - Offline-first reading experience
- */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { CachedChapter, ChapterContent, Verse } from '../types/bible';
 
-import type { CachedChapter, CachedBook, ChapterContent, Verse } from '../types/bible';
+const CACHE_PREFIX = 'swell_bible_cache_';
+const CACHE_INDEX_KEY = 'swell_bible_cache_index';
+const MAX_CACHED_CHAPTERS = 100;
 
 class BibleStorageService {
-  /**
-   * Cache a chapter for offline reading
-   * TODO: Implement with AsyncStorage or SQLite
-   */
   async cacheChapter(chapter: ChapterContent, verses: Verse[]): Promise<void> {
-    // TODO: Store chapter in local database
-    // Example structure:
-    // {
-    //   chapterId: chapter.id,
-    //   bookId: chapter.bookId,
-    //   chapterNumber: chapter.number,
-    //   content: chapter.content,
-    //   verses: verses,
-    //   cachedAt: Date.now(),
-    //   bibleId: chapter.bibleId,
-    // }
-    
-    console.log('TODO: Cache chapter for offline reading', chapter.id);
+    try {
+      const cached: CachedChapter = {
+        chapterId: chapter.id,
+        bookId: chapter.bookId,
+        chapterNumber: chapter.number,
+        content: chapter.content,
+        verses,
+        cachedAt: Date.now(),
+        bibleId: chapter.bibleId,
+      };
+
+      await AsyncStorage.setItem(
+        CACHE_PREFIX + chapter.id,
+        JSON.stringify(cached)
+      );
+
+      // Update index
+      const index = await this.getCacheIndex();
+      if (!index.includes(chapter.id)) {
+        index.push(chapter.id);
+        // Trim old entries if over limit
+        while (index.length > MAX_CACHED_CHAPTERS) {
+          const oldest = index.shift()!;
+          await AsyncStorage.removeItem(CACHE_PREFIX + oldest);
+        }
+        await AsyncStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(index));
+      }
+    } catch {
+      // Silently fail - caching is not critical
+    }
   }
 
-  /**
-   * Get a cached chapter if available
-   * TODO: Implement with AsyncStorage or SQLite
-   */
   async getCachedChapter(chapterId: string): Promise<CachedChapter | null> {
-    // TODO: Retrieve from local database
-    console.log('TODO: Get cached chapter', chapterId);
-    return null;
+    try {
+      const raw = await AsyncStorage.getItem(CACHE_PREFIX + chapterId);
+      if (!raw) return null;
+      return JSON.parse(raw) as CachedChapter;
+    } catch {
+      return null;
+    }
   }
 
-  /**
-   * Check if a chapter is cached
-   * TODO: Implement with AsyncStorage or SQLite
-   */
   async isChapterCached(chapterId: string): Promise<boolean> {
-    // TODO: Check local database
-    console.log('TODO: Check if chapter is cached', chapterId);
-    return false;
+    try {
+      const raw = await AsyncStorage.getItem(CACHE_PREFIX + chapterId);
+      return raw !== null;
+    } catch {
+      return false;
+    }
   }
 
-  /**
-   * Get all cached chapters for a book
-   * TODO: Implement with AsyncStorage or SQLite
-   */
-  async getCachedBook(bookId: string): Promise<CachedBook | null> {
-    // TODO: Retrieve all cached chapters for a book
-    console.log('TODO: Get cached book', bookId);
-    return null;
-  }
-
-  /**
-   * Clear old cached chapters (keep only recent ones)
-   * TODO: Implement cache cleanup strategy
-   */
   async clearOldCache(keepLastNDays: number = 30): Promise<void> {
-    // TODO: Remove chapters cached older than keepLastNDays
-    console.log('TODO: Clear old cache');
+    try {
+      const index = await this.getCacheIndex();
+      const cutoff = Date.now() - keepLastNDays * 86400000;
+      const remaining: string[] = [];
+
+      for (const id of index) {
+        const raw = await AsyncStorage.getItem(CACHE_PREFIX + id);
+        if (raw) {
+          const cached = JSON.parse(raw) as CachedChapter;
+          if (cached.cachedAt > cutoff) {
+            remaining.push(id);
+          } else {
+            await AsyncStorage.removeItem(CACHE_PREFIX + id);
+          }
+        }
+      }
+
+      await AsyncStorage.setItem(CACHE_INDEX_KEY, JSON.stringify(remaining));
+    } catch {
+      // Silently fail
+    }
   }
 
-  /**
-   * Get total cache size
-   * TODO: Implement cache size calculation
-   */
   async getCacheSize(): Promise<number> {
-    // TODO: Calculate total size of cached data
-    return 0;
+    const index = await this.getCacheIndex();
+    return index.length;
+  }
+
+  async clearAllCache(): Promise<void> {
+    try {
+      const index = await this.getCacheIndex();
+      for (const id of index) {
+        await AsyncStorage.removeItem(CACHE_PREFIX + id);
+      }
+      await AsyncStorage.setItem(CACHE_INDEX_KEY, JSON.stringify([]));
+    } catch {
+      // Silently fail
+    }
+  }
+
+  private async getCacheIndex(): Promise<string[]> {
+    try {
+      const raw = await AsyncStorage.getItem(CACHE_INDEX_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw) as string[];
+    } catch {
+      return [];
+    }
   }
 }
 
-// Export singleton instance
 export const bibleStorage = new BibleStorageService();
-
-// Export for testing/mocking
 export default BibleStorageService;
