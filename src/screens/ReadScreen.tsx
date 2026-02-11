@@ -247,18 +247,6 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
           ) : <View />}
         </View>
       </ScrollView>
-
-      {/* Alms floating button */}
-      <View style={styles.almsContainer}>
-        <TouchableOpacity
-          style={styles.almsButton}
-          activeOpacity={0.7}
-          onPress={() => navigation?.navigate?.('Stewardship')}
-        >
-          <Text style={styles.almsIcon}>{'\u2665'}</Text>
-          <Text style={styles.almsLabel}>Alms (SWELL)</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
@@ -278,7 +266,7 @@ const styles = StyleSheet.create({
   headerTouchable: { flexDirection: 'row', alignItems: 'center' },
   headerBookName: { fontSize: 14, fontWeight: '600', letterSpacing: 1, color: COLORS.ink },
   scroll: { flex: 1 },
-  scrollContent: { paddingHorizontal: 32, paddingTop: 32, paddingBottom: 120 },
+  scrollContent: { paddingHorizontal: 32, paddingTop: 32, paddingBottom: 40 },
   loadingContainer: { flex: 1, backgroundColor: COLORS.bgLight, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 40 },
   loadingText: { marginTop: 16, fontSize: 14, color: COLORS.inkLight, letterSpacing: 1 },
   errorText: { fontSize: 18, fontWeight: '600', color: COLORS.ink, marginBottom: 8 },
@@ -295,8 +283,4 @@ const styles = StyleSheet.create({
   navRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 32, marginTop: 20, marginBottom: 20 },
   navText: { fontSize: 11, letterSpacing: 3, textTransform: 'uppercase', color: COLORS.inkFaint, opacity: 0.5 },
   navDot: { fontSize: 6, color: COLORS.red, opacity: 0.2 },
-  almsContainer: { position: 'absolute', bottom: 24, left: 0, right: 0, alignItems: 'center' },
-  almsButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.7)', borderWidth: 1, borderColor: COLORS.border, paddingVertical: 10, paddingHorizontal: 20, borderRadius: 24, gap: 8 },
-  almsIcon: { fontSize: 14, color: COLORS.red, opacity: 0.7 },
-  almsLabel: { fontSize: 12, fontWeight: '500', letterSpacing: 1, color: COLORS.inkLight },
 });
