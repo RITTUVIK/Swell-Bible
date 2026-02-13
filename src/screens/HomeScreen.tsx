@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { bibleApi } from '../services/bibleApi';
 import { getReadingPosition, type ReadingPosition } from '../services/readingProgress';
 import { getBookById } from '../constants/bibleBooks';
 import { getSavedWallet } from '../services/walletContext';
-import { getStreakData, recordAppActivity } from '../services/streaks';
+import { recordAppActivity } from '../services/streaks';
 
 // Curated daily verses
 const DAILY_VERSES = [
@@ -42,14 +41,11 @@ export default function HomeScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [lastPosition, setLastPosition] = useState<ReadingPosition | null>(null);
   const [walletConnected, setWalletConnected] = useState(false);
-  const [appStreak, setAppStreak] = useState({ current: 0, best: 0 });
-  const [guidedStreak, setGuidedStreak] = useState({ current: 0, best: 0 });
 
   useEffect(() => {
     loadDailyVerse();
     loadLastPosition();
     loadWallet();
-    loadStreaks();
   }, []);
 
   // Re-check position when screen is focused
@@ -57,16 +53,9 @@ export default function HomeScreen({ navigation }: any) {
     const unsubscribe = navigation?.addListener?.('focus', () => {
       loadLastPosition();
       loadWallet();
-      loadStreaks();
     });
     return unsubscribe;
   }, [navigation]);
-
-  const loadStreaks = async () => {
-    const data = await getStreakData();
-    setAppStreak(data.app);
-    setGuidedStreak(data.guided);
-  };
 
   const loadLastPosition = async () => {
     const pos = await getReadingPosition();
@@ -148,39 +137,15 @@ export default function HomeScreen({ navigation }: any) {
           </View>
 
           {/* Continue Reading */}
-          <TouchableOpacity
-            style={styles.continueButton}
-            activeOpacity={0.6}
-            onPress={handleContinueReading}
-          >
-            <Text style={styles.continueText}>{continueLabel}</Text>
-          </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.continueButton}
+          activeOpacity={0.6}
+          onPress={handleContinueReading}
+        >
+          <Text style={styles.continueText}>{continueLabel}</Text>
+        </TouchableOpacity>
 
-          {/* Streaks */}
-          <View style={styles.streakBlock}>
-            <View style={styles.streakRow}>
-              <Ionicons name="flame-outline" size={14} color={COLORS.gold} style={styles.streakIcon} />
-              <Text style={styles.streakLabel}>App streak</Text>
-              <Text style={styles.streakValue}>{appStreak.current}</Text>
-              <Text style={styles.streakBest}>Best {appStreak.best}</Text>
-            </View>
-            <View style={[styles.streakRow, styles.streakRowLast]}>
-              <Ionicons name="water-outline" size={14} color={COLORS.inkLight} style={styles.streakIcon} />
-              <Text style={styles.streakLabel}>Guided streak</Text>
-              <Text style={styles.streakValue}>{guidedStreak.current}</Text>
-              <Text style={styles.streakBest}>Best {guidedStreak.best}</Text>
-            </View>
-          </View>
-
-          <TouchableOpacity
-            style={styles.guidedLink}
-            activeOpacity={0.6}
-            onPress={() => navigation?.navigate?.('GuidedScripture')}
-          >
-            <Text style={styles.guidedLinkText}>Guided reflection</Text>
-          </TouchableOpacity>
-
-          {/* Footer */}
+        {/* Footer */}
           <View style={styles.footer}>
             <TouchableOpacity
               activeOpacity={0.6}
@@ -310,50 +275,4 @@ const styles = StyleSheet.create({
     textDecorationColor: COLORS.border,
   },
 
-  // Streaks
-  streakBlock: {
-    marginBottom: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    backgroundColor: COLORS.card,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  streakRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  streakRowLast: {
-    marginBottom: 0,
-  },
-  streakIcon: {
-    marginRight: 8,
-  },
-  streakLabel: {
-    fontSize: 12,
-    color: COLORS.inkLight,
-    flex: 1,
-  },
-  streakValue: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.ink,
-    marginRight: 8,
-  },
-  streakBest: {
-    fontSize: 11,
-    color: COLORS.inkFaint,
-  },
-  guidedLink: {
-    marginBottom: 24,
-  },
-  guidedLinkText: {
-    fontSize: 12,
-    letterSpacing: 1,
-    color: COLORS.gold,
-    textDecorationLine: 'underline',
-    textDecorationColor: COLORS.goldLight,
-  },
 });

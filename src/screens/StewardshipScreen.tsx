@@ -25,6 +25,7 @@ import {
 import { connectPhantom, isPhantomInstalled } from '../services/phantomConnect';
 import { PublicKey } from '@solana/web3.js';
 import { getSwellBalance } from '../solana/balance';
+import { getStreakData } from '../services/streaks';
 
 /**
  * Missions will be fetched from a real backend in the future.
@@ -51,15 +52,27 @@ export default function StewardshipScreen({ navigation }: any) {
     missionWallet: '',
   });
   const [donateAmount, setDonateAmount] = useState('');
+  const [appStreak, setAppStreak] = useState({ current: 0, best: 0 });
+  const [guidedStreak, setGuidedStreak] = useState({ current: 0, best: 0 });
 
   useEffect(() => {
     loadWallet();
+    loadStreaks();
   }, []);
 
   useEffect(() => {
-    const unsub = navigation?.addListener?.('focus', loadWallet);
+    const unsub = navigation?.addListener?.('focus', () => {
+      loadWallet();
+      loadStreaks();
+    });
     return unsub;
   }, [navigation]);
+
+  const loadStreaks = async () => {
+    const data = await getStreakData();
+    setAppStreak(data.app);
+    setGuidedStreak(data.guided);
+  };
 
   const loadWallet = async () => {
     const wallet = await getSavedWallet();
@@ -310,6 +323,33 @@ export default function StewardshipScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* Streaks */}
+        <View style={styles.streaksSection}>
+          <Text style={styles.streaksSectionLabel}>Reading Streaks</Text>
+          <View style={styles.streaksRow}>
+            <View style={styles.streakCard}>
+              <Ionicons name="flame-outline" size={20} color={COLORS.gold} style={styles.streakCardIcon} />
+              <Text style={styles.streakCardValue}>{appStreak.current}</Text>
+              <Text style={styles.streakCardLabel}>App Streak</Text>
+              <Text style={styles.streakCardBest}>Best: {appStreak.best}</Text>
+            </View>
+            <View style={styles.streakCard}>
+              <Ionicons name="water-outline" size={20} color={COLORS.inkLight} style={styles.streakCardIcon} />
+              <Text style={styles.streakCardValue}>{guidedStreak.current}</Text>
+              <Text style={styles.streakCardLabel}>Guided Streak</Text>
+              <Text style={styles.streakCardBest}>Best: {guidedStreak.best}</Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.guidedCta}
+            activeOpacity={0.6}
+            onPress={() => navigation?.navigate?.('GuidedScripture')}
+          >
+            <Text style={styles.guidedCtaText}>Start guided reflection</Text>
+            <Ionicons name="chevron-forward" size={16} color={COLORS.gold} />
+          </TouchableOpacity>
+        </View>
+
         {/* Missions */}
         <View style={styles.missionsSection}>
           <Text style={styles.missionsLabel}>Active Missions & Parishes</Text>
@@ -514,6 +554,75 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+
+  // Streaks (ledger style)
+  streaksSection: {
+    paddingVertical: 24,
+    paddingHorizontal: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+    backgroundColor: COLORS.bg,
+  },
+  streaksSectionLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    color: COLORS.inkLight,
+    marginBottom: 16,
+  },
+  streaksRow: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 16,
+  },
+  streakCard: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingVertical: 16,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  streakCardIcon: {
+    marginBottom: 8,
+  },
+  streakCardValue: {
+    fontSize: 28,
+    fontWeight: '300',
+    color: COLORS.ink,
+    letterSpacing: -0.5,
+  },
+  streakCardLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: COLORS.inkLight,
+    marginTop: 4,
+  },
+  streakCardBest: {
+    fontSize: 10,
+    letterSpacing: 1,
+    color: COLORS.inkFaint,
+    marginTop: 2,
+  },
+  guidedCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+  },
+  guidedCtaText: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: COLORS.gold,
   },
 
   // Balance
