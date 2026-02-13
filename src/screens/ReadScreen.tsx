@@ -15,6 +15,7 @@ import { getBookById, BIBLE_BOOKS } from '../constants/bibleBooks';
 import { saveReadingPosition } from '../services/readingProgress';
 import { addBookmark } from '../services/bookmarks';
 import { getSettings } from '../services/settings';
+import { recordAppActivity } from '../services/streaks';
 import { COLORS } from '../constants/colors';
 
 interface ReadScreenProps {
@@ -74,6 +75,13 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
   useEffect(() => {
     loadChapter();
   }, [loadChapter]);
+
+  // Record app activity when chapter content is shown (meaningful reading)
+  useEffect(() => {
+    if (verses.length > 0) {
+      recordAppActivity();
+    }
+  }, [verses.length]);
 
   useEffect(() => {
     if (route?.params?.bookId) {

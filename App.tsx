@@ -16,6 +16,7 @@ import LibraryScreen from './src/screens/LibraryScreen';
 import SearchScreen from './src/screens/SearchScreen';
 import StewardshipScreen from './src/screens/StewardshipScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import GuidedScriptureScreen from './src/screens/GuidedScriptureScreen';
 import { COLORS } from './src/constants/colors';
 
 SplashScreen.preventAutoHideAsync();
@@ -128,6 +129,13 @@ export default function App() {
               component={SettingsScreen}
               options={{
                 animation: 'slide_from_right',
+              }}
+            />
+            <Stack.Screen
+              name="GuidedScripture"
+              component={GuidedScriptureScreen}
+              options={{
+                animation: 'slide_from_bottom',
               }}
             />
           </Stack.Navigator>

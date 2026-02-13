@@ -6,8 +6,6 @@ const apiKey = process.env.EXPO_PUBLIC_BIBLE_API_KEY || '';
 
 if (!apiKey) {
   console.warn('BIBLE API KEY is missing! Set EXPO_PUBLIC_BIBLE_API_KEY in your .env file.');
-} else {
-  console.log('Bible API key loaded:', apiKey.substring(0, 1) + '...');
 }
 
 export const BIBLE_API_CONFIG = {

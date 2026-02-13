@@ -14,7 +14,6 @@ import { getConnection } from './connection';
 import { getSwellTokenAccountAddress } from './account';
 import { getSwellDecimals } from './mint';
 import type { TokenBalance } from './types';
-import { SwellTransferError, SwellErrorCode } from './errors';
 
 // =============================================================================
 // PUBLIC API
@@ -39,12 +38,12 @@ import { SwellTransferError, SwellErrorCode } from './errors';
 export async function getSwellBalance(
   walletAddress: PublicKey
 ): Promise<TokenBalance> {
-  const connection = getConnection();
-  const decimals = await getSwellDecimals();
-
   const tokenAccountAddress = await getSwellTokenAccountAddress(walletAddress);
 
   try {
+    const connection = getConnection();
+    const decimals = await getSwellDecimals();
+
     const tokenAccount = await getAccount(
       connection,
       tokenAccountAddress,
@@ -71,10 +70,13 @@ export async function getSwellBalance(
       };
     }
 
-    throw new SwellTransferError(
-      `Failed to fetch SWELL balance: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      SwellErrorCode.NETWORK_ERROR,
-      error instanceof Error ? error : undefined
-    );
+    // RPC 403/network errors (e.g. public Solana RPC blocking browser requests):
+    // return zero balance so UI still works; set SOLANA_RPC_URL in .env for web.
+    return {
+      amount: 0,
+      rawAmount: BigInt(0),
+      tokenAccount: tokenAccountAddress,
+      accountExists: false,
+    };
   }
 }
