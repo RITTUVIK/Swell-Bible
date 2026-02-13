@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
@@ -118,74 +118,81 @@ export default function HomeScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.content}>
-        {/* Orthodox Cross */}
-        <View style={styles.crossContainer}>
-          <View style={styles.crossVertical} />
-          <View style={styles.crossBarTop} />
-          <View style={styles.crossBarMain} />
-          <View style={styles.crossBarBottom} />
-        </View>
-
-        {/* Daily Verse */}
-        <View style={styles.verseContainer}>
-          {loading ? (
-            <ActivityIndicator size="small" color={COLORS.gold} />
-          ) : (
-            <>
-              <Text style={styles.verseText}>
-                {'\u201C'}{verseText}{'\u201D'}
-              </Text>
-              <Text style={styles.verseReference}>{verseRef}</Text>
-            </>
-          )}
-        </View>
-
-        {/* Continue Reading */}
-        <TouchableOpacity
-          style={styles.continueButton}
-          activeOpacity={0.6}
-          onPress={handleContinueReading}
-        >
-          <Text style={styles.continueText}>{continueLabel}</Text>
-        </TouchableOpacity>
-
-        {/* Streaks */}
-        <View style={styles.streakBlock}>
-          <View style={styles.streakRow}>
-            <Ionicons name="flame-outline" size={14} color={COLORS.gold} style={styles.streakIcon} />
-            <Text style={styles.streakLabel}>App streak</Text>
-            <Text style={styles.streakValue}>{appStreak.current}</Text>
-            <Text style={styles.streakBest}>Best {appStreak.best}</Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.content}>
+          {/* Orthodox Cross */}
+          <View style={styles.crossContainer}>
+            <View style={styles.crossVertical} />
+            <View style={styles.crossBarTop} />
+            <View style={styles.crossBarMain} />
+            <View style={styles.crossBarBottom} />
           </View>
-          <View style={[styles.streakRow, styles.streakRowLast]}>
-            <Ionicons name="water-outline" size={14} color={COLORS.inkLight} style={styles.streakIcon} />
-            <Text style={styles.streakLabel}>Guided streak</Text>
-            <Text style={styles.streakValue}>{guidedStreak.current}</Text>
-            <Text style={styles.streakBest}>Best {guidedStreak.best}</Text>
+
+          {/* Daily Verse */}
+          <View style={styles.verseContainer}>
+            {loading ? (
+              <ActivityIndicator size="small" color={COLORS.gold} />
+            ) : (
+              <>
+                <Text style={styles.verseText}>
+                  {'\u201C'}{verseText}{'\u201D'}
+                </Text>
+                <Text style={styles.verseReference}>{verseRef}</Text>
+              </>
+            )}
           </View>
-        </View>
 
-        <TouchableOpacity
-          style={styles.guidedLink}
-          activeOpacity={0.6}
-          onPress={() => navigation?.navigate?.('GuidedScripture')}
-        >
-          <Text style={styles.guidedLinkText}>Guided reflection</Text>
-        </TouchableOpacity>
-
-        {/* Footer */}
-        <View style={styles.footer}>
+          {/* Continue Reading */}
           <TouchableOpacity
+            style={styles.continueButton}
             activeOpacity={0.6}
-            onPress={() => navigation?.navigate?.('Stewardship')}
+            onPress={handleContinueReading}
           >
-            <Text style={styles.stewardshipText}>
-              {walletConnected ? 'Stewardship Ledger' : 'Connect Wallet'}
-            </Text>
+            <Text style={styles.continueText}>{continueLabel}</Text>
           </TouchableOpacity>
+
+          {/* Streaks */}
+          <View style={styles.streakBlock}>
+            <View style={styles.streakRow}>
+              <Ionicons name="flame-outline" size={14} color={COLORS.gold} style={styles.streakIcon} />
+              <Text style={styles.streakLabel}>App streak</Text>
+              <Text style={styles.streakValue}>{appStreak.current}</Text>
+              <Text style={styles.streakBest}>Best {appStreak.best}</Text>
+            </View>
+            <View style={[styles.streakRow, styles.streakRowLast]}>
+              <Ionicons name="water-outline" size={14} color={COLORS.inkLight} style={styles.streakIcon} />
+              <Text style={styles.streakLabel}>Guided streak</Text>
+              <Text style={styles.streakValue}>{guidedStreak.current}</Text>
+              <Text style={styles.streakBest}>Best {guidedStreak.best}</Text>
+            </View>
+          </View>
+
+          <TouchableOpacity
+            style={styles.guidedLink}
+            activeOpacity={0.6}
+            onPress={() => navigation?.navigate?.('GuidedScripture')}
+          >
+            <Text style={styles.guidedLinkText}>Guided reflection</Text>
+          </TouchableOpacity>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <TouchableOpacity
+              activeOpacity={0.6}
+              onPress={() => navigation?.navigate?.('Stewardship')}
+            >
+              <Text style={styles.stewardshipText}>
+                {walletConnected ? 'Stewardship Ledger' : 'Connect Wallet'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -195,11 +202,19 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.bg,
   },
-  content: {
+  scroll: {
     flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 24,
+  },
+  content: {
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 40,
+    minHeight: 400,
   },
 
   // Orthodox cross
@@ -283,8 +298,7 @@ const styles = StyleSheet.create({
 
   // Footer
   footer: {
-    position: 'absolute',
-    bottom: 40,
+    marginTop: 24,
     alignItems: 'center',
   },
   stewardshipText: {
