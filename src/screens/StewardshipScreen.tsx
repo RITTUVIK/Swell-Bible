@@ -54,6 +54,8 @@ export default function StewardshipScreen({ navigation }: any) {
   const [donateAmount, setDonateAmount] = useState('');
   const [appStreak, setAppStreak] = useState({ current: 0, best: 0 });
   const [guidedStreak, setGuidedStreak] = useState({ current: 0, best: 0 });
+  const [appDates, setAppDates] = useState<string[]>([]);
+  const [guidedDates, setGuidedDates] = useState<string[]>([]);
 
   useEffect(() => {
     loadWallet();
@@ -72,7 +74,30 @@ export default function StewardshipScreen({ navigation }: any) {
     const data = await getStreakData();
     setAppStreak(data.app);
     setGuidedStreak(data.guided);
+    setAppDates(data.appDates);
+    setGuidedDates(data.guidedDates);
   };
+
+  // 14 days for calendar: oldest → today. 7×2 grid.
+  const calendarDays = (() => {
+    const out: { dateStr: string; dayNum: number; isToday: boolean }[] = [];
+    const today = new Date();
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = d.getDate();
+      out.push({
+        dateStr: `${y}-${m}-${String(day).padStart(2, '0')}`,
+        dayNum: day,
+        isToday: i === 0,
+      });
+    }
+    return out;
+  })();
+  const appSet = new Set(appDates);
+  const guidedSet = new Set(guidedDates);
 
   const loadWallet = async () => {
     const wallet = await getSavedWallet();
@@ -323,23 +348,49 @@ export default function StewardshipScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* Streaks */}
+        {/* Streaks — one calendar, day numbers in cells, stats in footer */}
         <View style={styles.streaksSection}>
-          <Text style={styles.streaksSectionLabel}>Reading Streaks</Text>
-          <View style={styles.streaksRow}>
-            <View style={styles.streakCard}>
-              <Ionicons name="flame-outline" size={20} color={COLORS.gold} style={styles.streakCardIcon} />
-              <Text style={styles.streakCardValue}>{appStreak.current}</Text>
-              <Text style={styles.streakCardLabel}>App Streak</Text>
-              <Text style={styles.streakCardBest}>Best: {appStreak.best}</Text>
+          <View style={styles.streaksCard}>
+            <Text style={styles.streaksTitle}>Reading Streaks</Text>
+
+            <View style={styles.streaksGrid}>
+              {[0, 1].map((row) => (
+                <View key={row} style={styles.streaksGridRow}>
+                  {calendarDays.slice(row * 7, row * 7 + 7).map(({ dateStr, dayNum, isToday }) => {
+                    const appDone = appSet.has(dateStr);
+                    const guidedDone = guidedSet.has(dateStr);
+                    return (
+                      <View
+                        key={dateStr}
+                        style={[styles.streaksDayCell, isToday && styles.streaksDayCellToday]}
+                      >
+                        <Text style={[styles.streaksDayNum, appDone && styles.streaksDayNumOnFill]}>
+                          {dayNum}
+                        </Text>
+                        <View style={[styles.streaksDayHalf, styles.streaksDayTop, appDone ? styles.streaksDayDoneApp : null]} />
+                        <View style={[styles.streaksDayHalf, styles.streaksDayBottom, guidedDone ? styles.streaksDayDoneGuided : null]} />
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
             </View>
-            <View style={styles.streakCard}>
-              <Ionicons name="water-outline" size={20} color={COLORS.inkLight} style={styles.streakCardIcon} />
-              <Text style={styles.streakCardValue}>{guidedStreak.current}</Text>
-              <Text style={styles.streakCardLabel}>Guided Streak</Text>
-              <Text style={styles.streakCardBest}>Best: {guidedStreak.best}</Text>
+
+            <View style={styles.streaksFooter}>
+              <View style={styles.streaksLegendRow}>
+                <View style={styles.streaksLegendItem}>
+                  <View style={[styles.streaksLegendBar, styles.streaksLegendApp]} />
+                  <Text style={styles.streaksLegendText}>App</Text>
+                </View>
+                <View style={styles.streaksLegendItem}>
+                  <View style={[styles.streaksLegendBar, styles.streaksLegendGuided]} />
+                  <Text style={styles.streaksLegendText}>Guided</Text>
+                </View>
+              </View>
+              <Text style={styles.streaksTodayLabel}>Today →</Text>
             </View>
           </View>
+
           <TouchableOpacity
             style={styles.guidedCta}
             activeOpacity={0.6}
@@ -556,59 +607,117 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
 
-  // Streaks (ledger style)
+  // Streaks — premium calendar-inspired
   streaksSection: {
-    paddingVertical: 24,
+    paddingVertical: 28,
     paddingHorizontal: 24,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
     backgroundColor: COLORS.bg,
   },
-  streaksSectionLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    color: COLORS.inkLight,
-    marginBottom: 16,
-  },
-  streaksRow: {
-    flexDirection: 'row',
-    gap: 16,
-    marginBottom: 16,
-  },
-  streakCard: {
-    flex: 1,
+  streaksCard: {
     backgroundColor: COLORS.white,
+    borderRadius: 16,
+    paddingVertical: 24,
+    paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 14,
-    alignItems: 'center',
+    marginBottom: 20,
   },
-  streakCardIcon: {
-    marginBottom: 8,
-  },
-  streakCardValue: {
-    fontSize: 28,
-    fontWeight: '300',
-    color: COLORS.ink,
-    letterSpacing: -0.5,
-  },
-  streakCardLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    letterSpacing: 2,
+  streaksTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 2.5,
     textTransform: 'uppercase',
     color: COLORS.inkLight,
-    marginTop: 4,
+    marginBottom: 18,
   },
-  streakCardBest: {
-    fontSize: 10,
-    letterSpacing: 1,
+  streaksGrid: {
+    marginBottom: 16,
+  },
+  streaksGridRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 6,
+  },
+  streaksDayCell: {
+    flex: 1,
+    aspectRatio: 1,
+    maxHeight: 40,
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  streaksDayNum: {
+    position: 'absolute',
+    top: 2,
+    left: 4,
+    fontSize: 9,
+    fontWeight: '600',
+    color: COLORS.inkLight,
+    zIndex: 1,
+  },
+  streaksDayNumOnFill: {
+    color: COLORS.white,
+  },
+  streaksDayCellToday: {
+    borderWidth: 2,
+    borderColor: COLORS.ink,
+  },
+  streaksDayHalf: {
+    flex: 1,
+    minHeight: 2,
+  },
+  streaksDayTop: {
+    backgroundColor: COLORS.borderLight,
+  },
+  streaksDayBottom: {
+    backgroundColor: COLORS.borderLight,
+  },
+  streaksDayDoneApp: {
+    backgroundColor: COLORS.gold,
+  },
+  streaksDayDoneGuided: {
+    backgroundColor: COLORS.inkLight,
+  },
+  streaksFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  streaksLegendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  streaksLegendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  streaksLegendBar: {
+    width: 16,
+    height: 8,
+    borderRadius: 2,
+  },
+  streaksLegendApp: {
+    backgroundColor: COLORS.gold,
+  },
+  streaksLegendGuided: {
+    backgroundColor: COLORS.inkLight,
+  },
+  streaksLegendText: {
+    fontSize: 11,
     color: COLORS.inkFaint,
-    marginTop: 2,
+  },
+  streaksTodayLabel: {
+    fontSize: 11,
+    color: COLORS.inkFaint,
+    fontWeight: '500',
   },
   guidedCta: {
     flexDirection: 'row',
