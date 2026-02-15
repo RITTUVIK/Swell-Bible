@@ -14,6 +14,10 @@ import type {
  * API Documentation: https://docs.api.bible/
  */
 
+const REQUEST_TIMEOUT_MS = 15000;
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1500;
+
 class BibleApiService {
   private baseUrl: string;
   private defaultBibleId: string;
@@ -23,12 +27,51 @@ class BibleApiService {
     this.defaultBibleId = BIBLE_API_CONFIG.DEFAULT_BIBLE_ID;
   }
 
+  private async fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error('Request timed out. Please check your internet connection and try again.');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
+    let lastError: Error | null = null;
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await this.fetchWithTimeout(url, options);
+        return response;
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`API request attempt ${attempt + 1} failed:`, err.message);
+        if (attempt < MAX_RETRIES) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+        }
+      }
+    }
+
+    throw lastError || new Error('Network request failed after retries');
+  }
+
   /**
    * Get list of available Bibles
    */
   async getBibles(): Promise<Bible[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/bibles`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/bibles`, {
         headers: getApiHeaders(),
       });
 
@@ -51,7 +94,7 @@ class BibleApiService {
     const id = bibleId || this.defaultBibleId;
     
     try {
-      const response = await fetch(`${this.baseUrl}/bibles/${id}/books`, {
+      const response = await this.fetchWithRetry(`${this.baseUrl}/bibles/${id}/books`, {
         headers: getApiHeaders(),
       });
 
@@ -74,7 +117,7 @@ class BibleApiService {
     const id = bibleId || this.defaultBibleId;
     
     try {
-      const response = await fetch(
+      const response = await this.fetchWithRetry(
         `${this.baseUrl}/bibles/${id}/books/${bookId}/chapters`,
         {
           headers: getApiHeaders(),
@@ -113,7 +156,7 @@ class BibleApiService {
         'include-verse-numbers': includeVerseNumbers.toString(),
       });
 
-      const response = await fetch(
+      const response = await this.fetchWithRetry(
         `${this.baseUrl}/bibles/${id}/chapters/${chapterId}?${params.toString()}`,
         {
           headers: getApiHeaders(),
@@ -150,7 +193,7 @@ class BibleApiService {
         'include-verse-numbers': 'false',
       });
 
-      const response = await fetch(
+      const response = await this.fetchWithRetry(
         `${this.baseUrl}/bibles/${id}/verses/${verseId}?${params.toString()}`,
         {
           headers: getApiHeaders(),
