@@ -56,6 +56,8 @@ export default function StewardshipScreen({ navigation }: any) {
   const [guidedStreak, setGuidedStreak] = useState({ current: 0, best: 0 });
   const [appDates, setAppDates] = useState<string[]>([]);
   const [guidedDates, setGuidedDates] = useState<string[]>([]);
+  const [displayedYear, setDisplayedYear] = useState(() => new Date().getFullYear());
+  const [displayedMonth, setDisplayedMonth] = useState(() => new Date().getMonth());
 
   useEffect(() => {
     loadWallet();
@@ -78,26 +80,53 @@ export default function StewardshipScreen({ navigation }: any) {
     setGuidedDates(data.guidedDates);
   };
 
-  // 14 days for calendar: oldest → today. 7×2 grid.
-  const calendarDays = (() => {
-    const out: { dateStr: string; dayNum: number; isToday: boolean }[] = [];
-    const today = new Date();
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, '0');
-      const day = d.getDate();
-      out.push({
-        dateStr: `${y}-${m}-${String(day).padStart(2, '0')}`,
-        dayNum: day,
-        isToday: i === 0,
-      });
+  // Calendar: 6 rows × 7 cols (S M T W T F S). Uses displayed month/year.
+  const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
+  const weekLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const monthGrid = (() => {
+    const year = displayedYear;
+    const month = displayedMonth;
+    const first = new Date(year, month, 1);
+    const last = new Date(year, month + 1, 0);
+    const startWeekday = first.getDay();
+    const daysInMonth = last.getDate();
+    const cells: { dayNum: number | null; dateStr: string | null; isToday: boolean }[] = [];
+    for (let i = 0; i < 42; i++) {
+      if (i < startWeekday || i >= startWeekday + daysInMonth) {
+        cells.push({ dayNum: null, dateStr: null, isToday: false });
+      } else {
+        const day = i - startWeekday + 1;
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const isToday = year === currentYear && month === currentMonth && now.getDate() === day;
+        cells.push({ dayNum: day, dateStr, isToday });
+      }
     }
-    return out;
+    return cells;
   })();
   const appSet = new Set(appDates);
   const guidedSet = new Set(guidedDates);
+  const currentMonthLabel = `${monthNames[displayedMonth]} ${displayedYear}`;
+  const canGoForward = displayedYear < currentYear || (displayedYear === currentYear && displayedMonth < currentMonth);
+  const goPrevMonth = () => {
+    if (displayedMonth === 0) {
+      setDisplayedMonth(11);
+      setDisplayedYear(displayedYear - 1);
+    } else {
+      setDisplayedMonth(displayedMonth - 1);
+    }
+  };
+  const goNextMonth = () => {
+    if (!canGoForward) return;
+    if (displayedMonth === 11) {
+      setDisplayedMonth(0);
+      setDisplayedYear(displayedYear + 1);
+    } else {
+      setDisplayedMonth(displayedMonth + 1);
+    }
+  };
 
   const loadWallet = async () => {
     const wallet = await getSavedWallet();
@@ -348,21 +377,71 @@ export default function StewardshipScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* Streaks — one calendar, day numbers in cells, stats in footer */}
+        {/* Streaks — reference style: pill title, headline, full month calendar, CTA card */}
         <View style={styles.streaksSection}>
           <View style={styles.streaksCard}>
-            <Text style={styles.streaksTitle}>Reading Streaks</Text>
+            <View style={styles.streaksPill}>
+              <Text style={styles.streaksPillText}>Reading Streaks</Text>
+            </View>
+            <View style={styles.streaksHeadlineBlock}>
+              <View style={styles.streaksHeadlineRow}>
+                <View style={styles.streaksHeadlineIcon}>
+                  <Ionicons name="flame-outline" size={24} color={COLORS.gold} />
+                </View>
+                <Text style={styles.streaksHeadlineLine}>
+                  App streak: {appStreak.current} day{appStreak.current !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <View style={[styles.streaksHeadlineRow, styles.streaksHeadlineRowLast]}>
+                <View style={styles.streaksHeadlineIcon}>
+                  <Ionicons name="book-outline" size={24} color={COLORS.inkLight} />
+                </View>
+                <Text style={styles.streaksHeadlineLine}>
+                  Guided streak: {guidedStreak.current} day{guidedStreak.current !== 1 ? 's' : ''}
+                </Text>
+              </View>
+            </View>
 
+            <Text style={styles.streaksCalendarLabel}>Calendar</Text>
+            <View style={styles.streaksMonthRow}>
+              <TouchableOpacity
+                style={styles.streaksMonthArrow}
+                onPress={goPrevMonth}
+                activeOpacity={0.6}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="chevron-back" size={20} color={COLORS.ink} />
+              </TouchableOpacity>
+              <Text style={styles.streaksMonthLabel}>{currentMonthLabel}</Text>
+              <TouchableOpacity
+                style={[styles.streaksMonthArrow, !canGoForward && styles.streaksMonthArrowDisabled]}
+                onPress={goNextMonth}
+                activeOpacity={0.6}
+                disabled={!canGoForward}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Ionicons name="chevron-forward" size={20} color={canGoForward ? COLORS.ink : COLORS.inkFaint} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.streaksWeekRow}>
+              {weekLetters.map((letter, i) => (
+                <Text key={i} style={styles.streaksWeekLetter}>{letter}</Text>
+              ))}
+            </View>
             <View style={styles.streaksGrid}>
-              {[0, 1].map((row) => (
+              {[0, 1, 2, 3, 4, 5].map((row) => (
                 <View key={row} style={styles.streaksGridRow}>
-                  {calendarDays.slice(row * 7, row * 7 + 7).map(({ dateStr, dayNum, isToday }) => {
-                    const appDone = appSet.has(dateStr);
-                    const guidedDone = guidedSet.has(dateStr);
+                  {monthGrid.slice(row * 7, row * 7 + 7).map((cell, i) => {
+                    const { dayNum, dateStr, isToday } = cell;
+                    if (dayNum === null) {
+                      return <View key={`empty-${row}-${i}`} style={styles.streaksDayCellEmpty} />;
+                    }
+                    const appDone = appSet.has(dateStr!);
+                    const guidedDone = guidedSet.has(dateStr!);
                     return (
                       <View
                         key={dateStr}
-                        style={[styles.streaksDayCell, isToday && styles.streaksDayCellToday]}
+                        style={[styles.streaksDayCell, styles.streaksDayCellPill, isToday && styles.streaksDayCellToday]}
                       >
                         <Text style={[styles.streaksDayNum, appDone && styles.streaksDayNumOnFill]}>
                           {dayNum}
@@ -387,17 +466,17 @@ export default function StewardshipScreen({ navigation }: any) {
                   <Text style={styles.streaksLegendText}>Guided</Text>
                 </View>
               </View>
-              <Text style={styles.streaksTodayLabel}>Today →</Text>
             </View>
           </View>
 
           <TouchableOpacity
-            style={styles.guidedCta}
+            style={styles.guidedCtaCard}
             activeOpacity={0.6}
             onPress={() => navigation?.navigate?.('GuidedScripture')}
           >
-            <Text style={styles.guidedCtaText}>Start guided reflection</Text>
-            <Ionicons name="chevron-forward" size={16} color={COLORS.gold} />
+            <Ionicons name="book-outline" size={20} color={COLORS.gold} />
+            <Text style={styles.guidedCtaCardText}>Start guided reflection to extend your streak</Text>
+            <Ionicons name="chevron-forward" size={18} color={COLORS.inkLight} />
           </TouchableOpacity>
         </View>
 
@@ -622,41 +701,114 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderWidth: 1,
     borderColor: COLORS.border,
-    marginBottom: 20,
+    marginBottom: 16,
   },
-  streaksTitle: {
-    fontSize: 11,
+  streaksPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: COLORS.bg,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 12,
+  },
+  streaksPillText: {
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 2.5,
+    letterSpacing: 2,
     textTransform: 'uppercase',
-    color: COLORS.inkLight,
-    marginBottom: 18,
+    color: COLORS.gold,
+  },
+  streaksHeadlineBlock: {
+    marginBottom: 24,
+  },
+  streaksHeadlineRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  streaksHeadlineRowLast: {
+    marginBottom: 0,
+  },
+  streaksHeadlineIcon: {
+    width: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streaksHeadlineLine: {
+    fontSize: 22,
+    fontWeight: '300',
+    color: COLORS.ink,
+    letterSpacing: -0.5,
+  },
+  streaksCalendarLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.ink,
+    marginBottom: 4,
+  },
+  streaksMonthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  streaksMonthArrow: {
+    padding: 4,
+  },
+  streaksMonthArrowDisabled: {
+    opacity: 0.5,
+  },
+  streaksMonthLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.inkFaint,
+  },
+  streaksWeekRow: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  streaksWeekLetter: {
+    flex: 1,
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.inkFaint,
+    textAlign: 'center',
   },
   streaksGrid: {
     marginBottom: 16,
   },
   streaksGridRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 6,
+    gap: 4,
+    marginBottom: 4,
   },
   streaksDayCell: {
     flex: 1,
     aspectRatio: 1,
-    maxHeight: 40,
-    borderRadius: 8,
+    maxHeight: 36,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'transparent',
   },
+  streaksDayCellEmpty: {
+    flex: 1,
+    aspectRatio: 1,
+    maxHeight: 36,
+  },
+  streaksDayCellPill: {
+    borderRadius: 18,
+  },
   streaksDayNum: {
     position: 'absolute',
     top: 2,
-    left: 4,
-    fontSize: 9,
+    left: 0,
+    right: 0,
+    fontSize: 11,
     fontWeight: '600',
     color: COLORS.inkLight,
     zIndex: 1,
+    textAlign: 'center',
   },
   streaksDayNumOnFill: {
     color: COLORS.white,
@@ -717,6 +869,23 @@ const styles = StyleSheet.create({
   streaksTodayLabel: {
     fontSize: 11,
     color: COLORS.inkFaint,
+    fontWeight: '500',
+  },
+  guidedCtaCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: COLORS.white,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  guidedCtaCardText: {
+    flex: 1,
+    fontSize: 13,
+    color: COLORS.ink,
     fontWeight: '500',
   },
   guidedCta: {
