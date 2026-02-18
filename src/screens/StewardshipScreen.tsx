@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -68,6 +68,10 @@ export default function StewardshipScreen({ navigation }: any) {
   const [rewardEligibility, setRewardEligibility] = useState<RewardEligibility | null>(null);
   const [claimingReward, setClaimingReward] = useState(false);
   const [claimSuccessToday, setClaimSuccessToday] = useState(false);
+  const [backupKeyModalVisible, setBackupKeyModalVisible] = useState(false);
+  const [backupKeyCopied, setBackupKeyCopied] = useState(false);
+  const [disconnectModalVisible, setDisconnectModalVisible] = useState(false);
+  const backupKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     loadWallet();
@@ -224,38 +228,24 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   }, []);
 
-  // ---- Disconnect ----
+  // ---- Disconnect (in-app modal on all platforms) ----
   const handleDisconnect = useCallback(() => {
-    const message = walletType === 'embedded'
+    setDisconnectModalVisible(true);
+  }, []);
+
+  const confirmDisconnect = useCallback(async () => {
+    await disconnectWallet();
+    setWalletAddress(null);
+    setWalletType(null);
+    setBalance(null);
+    setBalanceError(false);
+    setDisconnectModalVisible(false);
+  }, []);
+
+  const disconnectMessage =
+    walletType === 'embedded'
       ? 'Disconnect your wallet? Make sure you have backed up your private key first.'
       : 'Remove this wallet connection from the app?';
-
-    if (Platform.OS === 'web') {
-      if (window.confirm(message)) {
-        disconnectWallet().then(() => {
-          setWalletAddress(null);
-          setWalletType(null);
-          setBalance(null);
-          setBalanceError(false);
-        });
-      }
-      return;
-    }
-    Alert.alert('Disconnect Wallet', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: async () => {
-          await disconnectWallet();
-          setWalletAddress(null);
-          setWalletType(null);
-          setBalance(null);
-          setBalanceError(false);
-        },
-      },
-    ]);
-  }, [walletType]);
 
   // ---- Copy Address ----
   const handleCopyAddress = useCallback(() => {
@@ -265,34 +255,27 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   }, [walletAddress, copyToClipboard]);
 
-  // ---- Export Key ----
+  // ---- Export Key (in-app modal on all platforms) ----
   const handleExportKey = useCallback(async () => {
     if (walletType !== 'embedded') return;
     const secretKey = await getEmbeddedSecretKey();
     if (!secretKey) return;
-    const msg = 'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone. Copy key?';
-    if (Platform.OS === 'web') {
-      if (window.confirm(msg)) {
-        await copyToClipboard(secretKey);
-        alert('Private key copied to clipboard. Store it somewhere safe.');
-      }
-      return;
-    }
-    Alert.alert(
-      'Private Key Backup',
-      'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Copy Key',
-          onPress: async () => {
-            await copyToClipboard(secretKey);
-            Alert.alert('Copied', 'Private key copied to clipboard. Store it somewhere safe.');
-          },
-        },
-      ]
-    );
-  }, [walletType, copyToClipboard]);
+    backupKeyRef.current = secretKey;
+    setBackupKeyCopied(false);
+    setBackupKeyModalVisible(true);
+  }, [walletType]);
+
+  const handleBackupKeyCopy = useCallback(async () => {
+    if (!backupKeyRef.current) return;
+    await copyToClipboard(backupKeyRef.current);
+    setBackupKeyCopied(true);
+  }, [copyToClipboard]);
+
+  const closeBackupKeyModal = useCallback(() => {
+    setBackupKeyModalVisible(false);
+    backupKeyRef.current = null;
+    setBackupKeyCopied(false);
+  }, []);
 
   // ---- Donate ----
   const handleDonate = (mission: typeof MISSIONS[0]) => {
@@ -698,6 +681,86 @@ export default function StewardshipScreen({ navigation }: any) {
             <Text style={styles.modalFooterNote}>
               Your keys are stored locally on this device and never shared.
             </Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== BACKUP KEY MODAL (in-app, no browser confirm) ===== */}
+      <Modal
+        visible={backupKeyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBackupKeyModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Private Key Backup</Text>
+              <TouchableOpacity onPress={closeBackupKeyModal} activeOpacity={0.6}>
+                <Ionicons name="close" size={22} color={COLORS.inkLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalDesc}>
+              Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.
+            </Text>
+            {backupKeyCopied ? (
+              <View style={styles.backupKeySuccessRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} />
+                <Text style={styles.backupKeySuccessText}>Copied. Store it somewhere safe.</Text>
+              </View>
+            ) : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={closeBackupKeyModal}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={handleBackupKeyCopy}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalConfirmText}>Copy Key</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== DISCONNECT WALLET MODAL (in-app, no browser confirm) ===== */}
+      <Modal
+        visible={disconnectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDisconnectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Disconnect Wallet</Text>
+              <TouchableOpacity onPress={() => setDisconnectModalVisible(false)} activeOpacity={0.6}>
+                <Ionicons name="close" size={22} color={COLORS.inkLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalDesc}>{disconnectMessage}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setDisconnectModalVisible(false)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirm, styles.disconnectConfirm]}
+                onPress={confirmDisconnect}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalConfirmText}>Disconnect</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1380,6 +1443,17 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 8,
   },
+  backupKeySuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  backupKeySuccessText: {
+    fontSize: 14,
+    color: COLORS.ink,
+    fontWeight: '500',
+  },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -1405,5 +1479,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  disconnectConfirm: {
+    backgroundColor: COLORS.red,
   },
 });
