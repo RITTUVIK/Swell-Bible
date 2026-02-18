@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   Clipboard,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -43,6 +44,7 @@ export default function StewardshipScreen({ navigation }: any) {
   const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [connectingPhantom, setConnectingPhantom] = useState(false);
@@ -139,12 +141,14 @@ export default function StewardshipScreen({ navigation }: any) {
 
   const fetchBalance = async (address: string) => {
     setLoadingBalance(true);
+    setBalanceError(false);
     try {
       const pubkey = new PublicKey(address);
       const result = await getSwellBalance(pubkey);
       setBalance(result.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     } catch {
-      setBalance('0.00');
+      setBalanceError(true);
+      setBalance(null);
     } finally {
       setLoadingBalance(false);
     }
@@ -195,12 +199,32 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   }, []);
 
+  // Clipboard that works on web (navigator.clipboard) and native
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      Clipboard.setString(text);
+    }
+  }, []);
+
   // ---- Disconnect ----
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     const message = walletType === 'embedded'
       ? 'Disconnect your wallet? Make sure you have backed up your private key first.'
       : 'Remove this wallet connection from the app?';
 
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) {
+        disconnectWallet().then(() => {
+          setWalletAddress(null);
+          setWalletType(null);
+          setBalance(null);
+          setBalanceError(false);
+        });
+      }
+      return;
+    }
     Alert.alert('Disconnect Wallet', message, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -211,40 +235,48 @@ export default function StewardshipScreen({ navigation }: any) {
           setWalletAddress(null);
           setWalletType(null);
           setBalance(null);
+          setBalanceError(false);
         },
       },
     ]);
-  };
+  }, [walletType]);
 
   // ---- Copy Address ----
-  const handleCopyAddress = () => {
+  const handleCopyAddress = useCallback(() => {
     if (walletAddress) {
-      Clipboard.setString(walletAddress);
+      copyToClipboard(walletAddress);
       Alert.alert('Copied', 'Wallet address copied to clipboard.');
     }
-  };
+  }, [walletAddress, copyToClipboard]);
 
   // ---- Export Key ----
-  const handleExportKey = async () => {
+  const handleExportKey = useCallback(async () => {
     if (walletType !== 'embedded') return;
     const secretKey = await getEmbeddedSecretKey();
-    if (secretKey) {
-      Alert.alert(
-        'Private Key Backup',
-        'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Copy Key',
-            onPress: () => {
-              Clipboard.setString(secretKey);
-              Alert.alert('Copied', 'Private key copied to clipboard. Store it somewhere safe.');
-            },
-          },
-        ]
-      );
+    if (!secretKey) return;
+    const msg = 'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone. Copy key?';
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) {
+        await copyToClipboard(secretKey);
+        alert('Private key copied to clipboard. Store it somewhere safe.');
+      }
+      return;
     }
-  };
+    Alert.alert(
+      'Private Key Backup',
+      'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Copy Key',
+          onPress: async () => {
+            await copyToClipboard(secretKey);
+            Alert.alert('Copied', 'Private key copied to clipboard. Store it somewhere safe.');
+          },
+        },
+      ]
+    );
+  }, [walletType, copyToClipboard]);
 
   // ---- Donate ----
   const handleDonate = (mission: typeof MISSIONS[0]) => {
@@ -320,10 +352,14 @@ export default function StewardshipScreen({ navigation }: any) {
               <Text style={styles.balanceLabel}>Current Stewardship Balance</Text>
               {loadingBalance ? (
                 <ActivityIndicator size="small" color={COLORS.gold} style={{ marginVertical: 20 }} />
+              ) : balanceError ? (
+                <Text style={styles.balanceError}>Unable to fetch balance</Text>
               ) : (
-                <Text style={styles.balanceAmount}>{balance || '0.00'}</Text>
+                <>
+                  <Text style={styles.balanceAmount}>{balance ?? '0.00'}</Text>
+                  <Text style={styles.balanceCurrency}>SWELL</Text>
+                </>
               )}
-              <Text style={styles.balanceCurrency}>SWELL</Text>
 
               <TouchableOpacity onPress={handleCopyAddress} activeOpacity={0.6}>
                 <View style={styles.walletBadgeRow}>
@@ -625,11 +661,13 @@ export default function StewardshipScreen({ navigation }: any) {
               onChangeText={setDonateAmount}
               keyboardType="decimal-pad"
             />
-            {balance && (
+            {balanceError ? (
+              <Text style={styles.modalBalanceError}>Unable to fetch balance</Text>
+            ) : balance != null ? (
               <Text style={styles.modalBalance}>
                 Balance: {balance} SWELL
               </Text>
-            )}
+            ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancel}
@@ -932,6 +970,13 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     marginTop: 4,
   },
+  balanceError: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.inkLight,
+    fontStyle: 'italic',
+    marginVertical: 8,
+  },
   walletBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1219,6 +1264,12 @@ const styles = StyleSheet.create({
   modalBalance: {
     fontSize: 12,
     color: COLORS.inkFaint,
+    marginBottom: 8,
+  },
+  modalBalanceError: {
+    fontSize: 12,
+    color: COLORS.inkLight,
+    fontStyle: 'italic',
     marginBottom: 8,
   },
   modalActions: {

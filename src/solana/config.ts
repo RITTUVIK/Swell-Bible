@@ -8,6 +8,7 @@
  */
 
 import { PublicKey, Commitment, clusterApiUrl } from '@solana/web3.js';
+import Constants from 'expo-constants';
 
 // =============================================================================
 // NETWORK CONFIGURATION
@@ -22,15 +23,16 @@ export const SOLANA_CLUSTER = 'mainnet-beta' as const;
 /**
  * RPC endpoint for Solana mainnet.
  *
- * Options:
- * 1. Use Solana's public RPC (rate-limited, not recommended for production)
- * 2. Use a dedicated RPC provider (Helius, QuickNode, Triton, etc.)
- *
- * For production, replace with a dedicated RPC endpoint:
- * e.g., 'https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY'
+ * Read from app config (app.config.js injects EXPO_PUBLIC_SOLANA_RPC_URL into extra)
+ * so it works on web and native. Set in .env:
+ *   EXPO_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
+ * The public RPC returns 403 from apps — use a dedicated RPC. Restart dev server after .env changes.
  */
 export const SOLANA_RPC_ENDPOINT: string =
-  process.env.SOLANA_RPC_URL || clusterApiUrl(SOLANA_CLUSTER);
+  (typeof Constants !== 'undefined' && Constants.expoConfig?.extra?.solanaRpcUrl) ||
+  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SOLANA_RPC_URL) ||
+  (typeof process !== 'undefined' && process.env?.SOLANA_RPC_URL) ||
+  clusterApiUrl(SOLANA_CLUSTER);
 
 /**
  * Transaction commitment level.
