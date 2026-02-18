@@ -1,5 +1,10 @@
-// Expo loads .env when running this config. RPC URL is passed to the app via extra
-// so it works on all platforms (including web).
+// Load .env from project root so EXPO_PUBLIC_* are set when this config runs (Expo doesn't always load them for web).
+try {
+  require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+} catch (_) {
+  // dotenv not installed or .env missing; rely on Expo having set process.env
+}
+
 const app = require('./app.json');
 module.exports = {
   ...app.expo,

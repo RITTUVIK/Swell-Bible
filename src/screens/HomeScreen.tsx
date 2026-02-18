@@ -122,6 +122,9 @@ export default function HomeScreen({ navigation }: any) {
             <View style={styles.crossBarBottom} />
           </View>
 
+          {/* Verse of the Day label */}
+          <Text style={styles.verseOfDayLabel}>Verse of the Day</Text>
+
           {/* Daily Verse */}
           <View style={styles.verseContainer}>
             {loading ? (
@@ -145,17 +148,25 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.continueText}>{continueLabel}</Text>
         </TouchableOpacity>
 
-        {/* Footer */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              activeOpacity={0.6}
-              onPress={() => navigation?.navigate?.('Stewardship')}
-            >
-              <Text style={styles.stewardshipText}>
-                {walletConnected ? 'Stewardship Ledger' : 'Connect Wallet'}
+        {/* Daily Reading Reward panel (inspiration: Welcome panel) */}
+          <TouchableOpacity
+            style={styles.welcomePanel}
+            activeOpacity={0.9}
+            onPress={() => navigation?.navigate?.('Stewardship')}
+          >
+            <Text style={styles.welcomePanelTitle}>Daily Reading Reward</Text>
+            <Text style={styles.welcomePanelHeadline}>
+              Complete today's reading to earn 1 SWELL.
+            </Text>
+            <Text style={styles.welcomePanelBody}>
+              Open a chapter, spend time in it, and scroll near the end. Reading completed for today will unlock the claim button.
+            </Text>
+            <View style={styles.welcomePanelRow}>
+              <Text style={styles.welcomePanelButton}>
+                {walletConnected ? 'View & Claim' : 'Connect Wallet'}
               </Text>
-            </TouchableOpacity>
-          </View>
+            </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -223,6 +234,15 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '-20deg' }],
   },
 
+  verseOfDayLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2.5,
+    textTransform: 'uppercase',
+    color: COLORS.inkLight,
+    marginBottom: 16,
+  },
+
   // Verse
   verseContainer: {
     alignItems: 'center',
@@ -261,18 +281,50 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
 
-  // Footer
-  footer: {
-    marginTop: 24,
+  welcomePanel: {
+    marginTop: 32,
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: COLORS.card,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'flex-start',
+  },
+  welcomePanelTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: COLORS.inkLight,
+    marginBottom: 8,
+  },
+  welcomePanelHeadline: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.ink,
+    marginBottom: 12,
+    lineHeight: 24,
+  },
+  welcomePanelBody: {
+    fontSize: 14,
+    color: COLORS.inkLight,
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  welcomePanelRow: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  stewardshipText: {
-    fontSize: 11,
-    letterSpacing: 2,
-    color: COLORS.inkFaint,
-    opacity: 0.6,
-    textDecorationLine: 'underline',
-    textDecorationColor: COLORS.border,
+  welcomePanelButton: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: COLORS.gold,
+    paddingVertical: 10,
+    paddingRight: 8,
   },
 
 });

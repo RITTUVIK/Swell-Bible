@@ -16,6 +16,7 @@ import { saveReadingPosition } from '../services/readingProgress';
 import { addBookmark } from '../services/bookmarks';
 import { getSettings } from '../services/settings';
 import { recordAppActivity } from '../services/streaks';
+import { setReadingCompletedForToday } from '../services/dailyReward';
 import { COLORS } from '../constants/colors';
 
 interface ReadScreenProps {
@@ -32,6 +33,7 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
   const [fontSize, setFontSize] = useState(19);
   const [bibleVersionId, setBibleVersionId] = useState<string | undefined>(undefined);
   const scrollRef = useRef<ScrollView>(null);
+  const readingStartTimeRef = useRef<number | null>(null);
 
   const {
     fetchChapter,
@@ -75,6 +77,16 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
   useEffect(() => {
     loadChapter();
   }, [loadChapter]);
+
+  useEffect(() => {
+    readingStartTimeRef.current = null;
+  }, [currentBookId, currentChapter]);
+
+  useEffect(() => {
+    if (verses.length > 0 && readingStartTimeRef.current === null) {
+      readingStartTimeRef.current = Date.now();
+    }
+  }, [verses.length, currentBookId, currentChapter]);
 
   // Record app activity when chapter content is shown (meaningful reading)
   useEffect(() => {
@@ -120,6 +132,17 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
       }
     }
   };
+
+  const handleScroll = useCallback((event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const scrollableHeight = contentSize.height - layoutMeasurement.height;
+    if (scrollableHeight <= 0) return;
+    const scrollRatio = contentOffset.y / scrollableHeight;
+    const startTime = readingStartTimeRef.current;
+    if (scrollRatio >= 0.8 && startTime != null && Date.now() - startTime >= 60_000) {
+      setReadingCompletedForToday();
+    }
+  }, []);
 
   const handleVerseLongPress = (verse: typeof verses[0]) => {
     const parts = verse.id.split('.');
@@ -208,6 +231,8 @@ export default function ReadScreen({ route, navigation }: ReadScreenProps) {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={400}
       >
         {/* Chapter heading */}
         <View style={styles.chapterHeader}>

@@ -27,6 +27,11 @@ import { connectPhantom, isPhantomInstalled } from '../services/phantomConnect';
 import { PublicKey } from '@solana/web3.js';
 import { getSwellBalance } from '../solana/balance';
 import { getStreakData } from '../services/streaks';
+import {
+  getRewardEligibility,
+  claimTodaysReward,
+  type RewardEligibility,
+} from '../services/dailyReward';
 
 /**
  * Missions will be fetched from a real backend in the future.
@@ -60,6 +65,9 @@ export default function StewardshipScreen({ navigation }: any) {
   const [guidedDates, setGuidedDates] = useState<string[]>([]);
   const [displayedYear, setDisplayedYear] = useState(() => new Date().getFullYear());
   const [displayedMonth, setDisplayedMonth] = useState(() => new Date().getMonth());
+  const [rewardEligibility, setRewardEligibility] = useState<RewardEligibility | null>(null);
+  const [claimingReward, setClaimingReward] = useState(false);
+  const [claimSuccessToday, setClaimSuccessToday] = useState(false);
 
   useEffect(() => {
     loadWallet();
@@ -136,7 +144,15 @@ export default function StewardshipScreen({ navigation }: any) {
       setWalletAddress(wallet.address);
       setWalletType(wallet.type);
       fetchBalance(wallet.address);
+    } else {
+      setWalletAddress(null);
+      setWalletType(null);
+      setBalance(null);
+      setBalanceError(false);
     }
+    const eligibility = await getRewardEligibility(wallet.connected && !!wallet.address);
+    setRewardEligibility(eligibility);
+    setClaimSuccessToday(eligibility.reason === 'already_claimed');
   };
 
   const fetchBalance = async (address: string) => {
@@ -319,6 +335,18 @@ export default function StewardshipScreen({ navigation }: any) {
     );
   };
 
+  const handleClaimReward = useCallback(async () => {
+    if (rewardEligibility?.reason !== 'eligible') return;
+    setClaimingReward(true);
+    try {
+      await claimTodaysReward();
+      setClaimSuccessToday(true);
+      setRewardEligibility(await getRewardEligibility(!!walletAddress));
+    } finally {
+      setClaimingReward(false);
+    }
+  }, [rewardEligibility?.reason, walletAddress]);
+
   const shortAddress = walletAddress
     ? `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`
     : null;
@@ -411,6 +439,40 @@ export default function StewardshipScreen({ navigation }: any) {
               </TouchableOpacity>
             </>
           )}
+        </View>
+
+        {/* Daily Reading Reward — claim UI only; intro copy lives on Home panel. */}
+        <View style={styles.dailyRewardSection}>
+          <View style={styles.dailyRewardCard}>
+            {rewardEligibility == null ? (
+              <ActivityIndicator size="small" color={COLORS.gold} style={{ marginTop: 12 }} />
+            ) : rewardEligibility.reason === 'wallet_not_connected' ? (
+              <Text style={styles.dailyRewardMessage}>Connect a wallet to claim your reward.</Text>
+            ) : rewardEligibility.reason === 'reading_not_completed' ? (
+              <Text style={styles.dailyRewardMessage}>Reading completed for today will unlock the claim button.</Text>
+            ) : rewardEligibility.reason === 'already_claimed' || claimSuccessToday ? (
+              <View style={styles.dailyRewardSuccessRow}>
+                <Ionicons name="checkmark-circle" size={20} color={COLORS.gold} />
+                <Text style={styles.dailyRewardSuccessText}>1 SWELL earned today.</Text>
+              </View>
+            ) : rewardEligibility.reason === 'eligible' ? (
+              <>
+                <Text style={styles.dailyRewardMessage}>Reading completed for today.</Text>
+                <TouchableOpacity
+                  style={styles.dailyRewardClaimButton}
+                  onPress={handleClaimReward}
+                  disabled={claimingReward}
+                  activeOpacity={0.7}
+                >
+                  {claimingReward ? (
+                    <ActivityIndicator size="small" color={COLORS.white} />
+                  ) : (
+                    <Text style={styles.dailyRewardClaimButtonText}>Claim Today's SWELL</Text>
+                  )}
+                </TouchableOpacity>
+              </>
+            ) : null}
+          </View>
         </View>
 
         {/* Streaks — reference style: pill title, headline, full month calendar, CTA card */}
@@ -976,6 +1038,52 @@ const styles = StyleSheet.create({
     color: COLORS.inkLight,
     fontStyle: 'italic',
     marginVertical: 8,
+  },
+  dailyRewardSection: {
+    paddingHorizontal: 24,
+    paddingVertical: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  dailyRewardCard: {
+    backgroundColor: COLORS.card,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  dailyRewardMessage: {
+    fontSize: 14,
+    color: COLORS.ink,
+    marginTop: 4,
+  },
+  dailyRewardSuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  dailyRewardSuccessText: {
+    fontSize: 14,
+    color: COLORS.ink,
+    fontWeight: '500',
+  },
+  dailyRewardClaimButton: {
+    marginTop: 16,
+    backgroundColor: COLORS.gold,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  dailyRewardClaimButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: COLORS.white,
   },
   walletBadgeRow: {
     flexDirection: 'row',
