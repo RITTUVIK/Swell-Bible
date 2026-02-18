@@ -157,9 +157,8 @@ export default function HomeScreen({ navigation }: any) {
             onPress={() => setChecklistVisible(true)}
           >
             <View style={styles.welcomePanelLeft}>
-              <Text style={styles.welcomePanelLabel}>Connect</Text>
               <Text style={styles.welcomePanelHeadline}>
-                Learn more on how you can connect yourself to the Bible.
+                Learn how to connect more with the Word of the Bible.
               </Text>
               <TouchableOpacity
                 style={styles.welcomePanelButton}
@@ -182,33 +181,28 @@ export default function HomeScreen({ navigation }: any) {
         </View>
       </ScrollView>
 
-      {/* Checklist modal — reading → SWELL and important info */}
+      {/* Checklist modal — overview of earning SWELL */}
       <Modal
         visible={checklistVisible}
         transparent
-        animationType="fade"
+        animationType="none"
         onRequestClose={() => setChecklistVisible(false)}
       >
         <Pressable style={styles.checklistOverlay} onPress={() => setChecklistVisible(false)}>
           <Pressable style={styles.checklistCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.checklistTitle}>How to connect</Text>
-            <Text style={styles.checklistSubtitle}>Reading the Bible can earn you SWELL. Here’s what matters:</Text>
+            <Text style={styles.checklistSubtitle}>Learn how to connect more with the Word of the Bible.</Text>
             <View style={styles.checklistList}>
               <View style={styles.checklistRow}>
                 <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
-                <Text style={styles.checklistItem}>Complete today’s reading to earn 1 SWELL.</Text>
+                <Text style={styles.checklistItem}>Complete today’s reading to unlock 1 SWELL.</Text>
               </View>
               <View style={styles.checklistRow}>
                 <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
-                <Text style={styles.checklistItem}>Open a chapter, spend time in it, and scroll near the end.</Text>
+                <Text style={styles.checklistItem}>Connect your wallet in Stewardship to claim it.</Text>
               </View>
               <View style={styles.checklistRow}>
                 <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
-                <Text style={styles.checklistItem}>Connect a wallet on the Stewardship tab to claim your reward.</Text>
-              </View>
-              <View style={styles.checklistRow}>
-                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
-                <Text style={styles.checklistItem}>One reward per day — a simple daily discipline.</Text>
+                <Text style={styles.checklistItem}>One reward per day — built on discipline.</Text>
               </View>
             </View>
             <TouchableOpacity
