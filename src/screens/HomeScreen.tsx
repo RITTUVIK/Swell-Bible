@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, ScrollView, Modal, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../constants/colors';
 import { bibleApi } from '../services/bibleApi';
 import { getReadingPosition, type ReadingPosition } from '../services/readingProgress';
@@ -41,6 +42,7 @@ export default function HomeScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [lastPosition, setLastPosition] = useState<ReadingPosition | null>(null);
   const [walletConnected, setWalletConnected] = useState(false);
+  const [checklistVisible, setChecklistVisible] = useState(false);
 
   useEffect(() => {
     loadDailyVerse();
@@ -148,27 +150,86 @@ export default function HomeScreen({ navigation }: any) {
           <Text style={styles.continueText}>{continueLabel}</Text>
         </TouchableOpacity>
 
-        {/* Daily Reading Reward panel (inspiration: Welcome panel) */}
+        {/* Connect panel — wide; Continue opens checklist modal */}
           <TouchableOpacity
             style={styles.welcomePanel}
-            activeOpacity={0.9}
-            onPress={() => navigation?.navigate?.('Stewardship')}
+            activeOpacity={0.95}
+            onPress={() => setChecklistVisible(true)}
           >
-            <Text style={styles.welcomePanelTitle}>Daily Reading Reward</Text>
-            <Text style={styles.welcomePanelHeadline}>
-              Complete today's reading to earn 1 SWELL.
-            </Text>
-            <Text style={styles.welcomePanelBody}>
-              Open a chapter, spend time in it, and scroll near the end. Reading completed for today will unlock the claim button.
-            </Text>
-            <View style={styles.welcomePanelRow}>
-              <Text style={styles.welcomePanelButton}>
-                {walletConnected ? 'View & Claim' : 'Connect Wallet'}
+            <View style={styles.welcomePanelLeft}>
+              <Text style={styles.welcomePanelLabel}>Connect</Text>
+              <Text style={styles.welcomePanelHeadline}>
+                Learn more on how you can connect yourself to the Bible.
               </Text>
+              <TouchableOpacity
+                style={styles.welcomePanelButton}
+                activeOpacity={0.7}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  setChecklistVisible(true);
+                }}
+              >
+                <Text style={styles.welcomePanelButtonText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.welcomePanelRight}>
+              <View style={styles.welcomePanelIconCircle}>
+                <Ionicons name="book-outline" size={32} color={COLORS.gold} />
+              </View>
+              <Text style={styles.welcomePanelProgress}>1</Text>
             </View>
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Checklist modal — reading → SWELL and important info */}
+      <Modal
+        visible={checklistVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setChecklistVisible(false)}
+      >
+        <Pressable style={styles.checklistOverlay} onPress={() => setChecklistVisible(false)}>
+          <Pressable style={styles.checklistCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.checklistTitle}>How to connect</Text>
+            <Text style={styles.checklistSubtitle}>Reading the Bible can earn you SWELL. Here’s what matters:</Text>
+            <View style={styles.checklistList}>
+              <View style={styles.checklistRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
+                <Text style={styles.checklistItem}>Complete today’s reading to earn 1 SWELL.</Text>
+              </View>
+              <View style={styles.checklistRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
+                <Text style={styles.checklistItem}>Open a chapter, spend time in it, and scroll near the end.</Text>
+              </View>
+              <View style={styles.checklistRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
+                <Text style={styles.checklistItem}>Connect a wallet on the Stewardship tab to claim your reward.</Text>
+              </View>
+              <View style={styles.checklistRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} style={styles.checklistIcon} />
+                <Text style={styles.checklistItem}>One reward per day — a simple daily discipline.</Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={styles.checklistButton}
+              activeOpacity={0.7}
+              onPress={() => {
+                setChecklistVisible(false);
+                navigation?.navigate?.('Stewardship');
+              }}
+            >
+              <Text style={styles.checklistButtonText}>Go to Stewardship</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.checklistDismiss}
+              onPress={() => setChecklistVisible(false)}
+            >
+              <Text style={styles.checklistDismissText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -189,7 +250,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
+    paddingHorizontal: 24,
     minHeight: 400,
   },
 
@@ -284,47 +345,141 @@ const styles = StyleSheet.create({
   welcomePanel: {
     marginTop: 32,
     width: '100%',
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#E8E6E0',
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  welcomePanelLeft: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  welcomePanelLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+    color: COLORS.inkLight,
+    marginBottom: 6,
+  },
+  welcomePanelHeadline: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.ink,
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  welcomePanelButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    backgroundColor: '#D8D6D0',
+    borderWidth: 1,
+    borderColor: COLORS.ink,
+  },
+  welcomePanelButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    color: COLORS.ink,
+  },
+  welcomePanelRight: {
+    alignItems: 'center',
+  },
+  welcomePanelIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  welcomePanelProgress: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.ink,
+    marginTop: 8,
+  },
+
+  checklistOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  checklistCard: {
+    width: '100%',
     maxWidth: 400,
     backgroundColor: COLORS.card,
     borderRadius: 16,
     padding: 24,
     borderWidth: 1,
     borderColor: COLORS.border,
-    alignItems: 'flex-start',
   },
-  welcomePanelTitle: {
+  checklistTitle: {
     fontSize: 11,
     fontWeight: '600',
     letterSpacing: 2,
     textTransform: 'uppercase',
     color: COLORS.inkLight,
-    marginBottom: 8,
+    marginBottom: 6,
   },
-  welcomePanelHeadline: {
-    fontSize: 18,
-    fontWeight: '700',
+  checklistSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.ink,
-    marginBottom: 12,
     lineHeight: 24,
-  },
-  welcomePanelBody: {
-    fontSize: 14,
-    color: COLORS.inkLight,
-    lineHeight: 22,
     marginBottom: 20,
   },
-  welcomePanelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  checklistList: {
+    marginBottom: 24,
   },
-  welcomePanelButton: {
+  checklistRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 14,
+  },
+  checklistIcon: {
+    marginRight: 10,
+    marginTop: 2,
+  },
+  checklistItem: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.ink,
+    lineHeight: 22,
+  },
+  checklistButton: {
+    backgroundColor: COLORS.gold,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  checklistButtonText: {
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 1.5,
     textTransform: 'uppercase',
-    color: COLORS.gold,
-    paddingVertical: 10,
-    paddingRight: 8,
+    color: COLORS.white,
+  },
+  checklistDismiss: {
+    alignItems: 'center',
+  },
+  checklistDismissText: {
+    fontSize: 13,
+    color: COLORS.inkLight,
+    letterSpacing: 1,
   },
 
 });
