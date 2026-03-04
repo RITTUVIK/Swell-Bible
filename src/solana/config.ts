@@ -94,6 +94,18 @@ export const DEFAULT_COMPUTE_UNITS = 100_000;
 export const TX_CONFIRMATION_TIMEOUT_MS = 60_000;
 
 // =============================================================================
+// STREAK PROGRAM
+// =============================================================================
+
+/**
+ * Program ID for the swell-streak on-chain program.
+ * Placeholder: System Program ID (valid PublicKey so app loads).
+ * Replace with the real program ID after `anchor build && anchor deploy`.
+ */
+export const STREAK_PROGRAM_ID_ADDRESS = '11111111111111111111111111111111';
+export const STREAK_PROGRAM_ID = new PublicKey(STREAK_PROGRAM_ID_ADDRESS);
+
+// =============================================================================
 // EXPLORER CONFIGURATION
 // =============================================================================
 
