@@ -86,6 +86,11 @@ export default function StewardshipScreen({ navigation }: any) {
     return unsub;
   }, [navigation]);
 
+  const getTodayDateString = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const loadStreaks = async () => {
     const data = await getStreakData();
     setAppStreak(data.app);
@@ -93,6 +98,8 @@ export default function StewardshipScreen({ navigation }: any) {
     setAppDates(data.appDates);
     setGuidedDates(data.guidedDates);
   };
+
+  const guidedCompletedToday = guidedDates.includes(getTodayDateString());
 
   // Calendar: 6 rows × 7 cols (S M T W T F S). Uses displayed month/year.
   const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
@@ -551,13 +558,25 @@ export default function StewardshipScreen({ navigation }: any) {
           </View>
 
           <TouchableOpacity
-            style={styles.guidedCtaCard}
+            style={[styles.guidedCtaCard, guidedCompletedToday && styles.guidedCtaCardDone]}
             activeOpacity={0.6}
-            onPress={() => navigation?.navigate?.('GuidedScripture')}
+            onPress={() => {
+              if (guidedCompletedToday) {
+                Alert.alert('Already completed', 'You have already completed today\'s reflection.');
+              } else {
+                navigation?.navigate?.('GuidedScripture');
+              }
+            }}
           >
-            <Ionicons name="book-outline" size={20} color={COLORS.gold} />
-            <Text style={styles.guidedCtaCardText}>Start guided reflection to extend your streak</Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.inkLight} />
+            <Ionicons
+              name={guidedCompletedToday ? 'checkmark-circle' : 'book-outline'}
+              size={20}
+              color={guidedCompletedToday ? COLORS.gold : COLORS.gold}
+            />
+            <Text style={[styles.guidedCtaCardText, guidedCompletedToday && styles.guidedCtaCardTextDone]}>
+              {guidedCompletedToday ? 'Guided reflection completed' : 'Start guided reflection to extend your streak'}
+            </Text>
+            {!guidedCompletedToday && <Ionicons name="chevron-forward" size={18} color={COLORS.inkLight} />}
           </TouchableOpacity>
         </View>
 
@@ -1045,11 +1064,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  guidedCtaCardDone: {
+    backgroundColor: COLORS.bg,
+    borderColor: COLORS.goldLight,
+  },
   guidedCtaCardText: {
     flex: 1,
     fontSize: 13,
     color: COLORS.ink,
     fontWeight: '500',
+  },
+  guidedCtaCardTextDone: {
+    color: COLORS.gold,
   },
   guidedCta: {
     flexDirection: 'row',
