@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 import { bibleApi } from '../services/bibleApi';
-import { bibleStorage } from '../services/bibleStorage';
 import type { Book, Chapter, ChapterContent, Verse } from '../types/bible';
 
 interface UseBibleOptions {
@@ -65,52 +64,12 @@ export const useBible = (options: UseBibleOptions = {}): UseBibleReturn => {
     setLoadingChapter(true);
     setError(null);
     try {
-      // Try cache first
-      const cached = await bibleStorage.getCachedChapter(chapterId);
-      if (cached && cached.bibleId === (bibleId || 'de4e12af7f28f599-02')) {
-        setChapterContent({
-          id: cached.chapterId,
-          bibleId: cached.bibleId,
-          bookId: cached.bookId,
-          number: cached.chapterNumber,
-          content: cached.content,
-          reference: '',
-          verseCount: cached.verses.length,
-          copyright: '',
-        });
-        setVerses(cached.verses);
-        setLoadingChapter(false);
-        return;
-      }
-
-      // Fetch from API
       const content = await bibleApi.getChapter(chapterId, bibleId);
       const parsedVerses = bibleApi.parseChapterIntoVerses(content);
-
       setChapterContent(content);
       setVerses(parsedVerses);
-
-      // Cache for offline use
-      bibleStorage.cacheChapter(content, parsedVerses);
     } catch (err) {
-      // On network error, try loading from cache
-      const cached = await bibleStorage.getCachedChapter(chapterId);
-      if (cached) {
-        setChapterContent({
-          id: cached.chapterId,
-          bibleId: cached.bibleId,
-          bookId: cached.bookId,
-          number: cached.chapterNumber,
-          content: cached.content,
-          reference: '',
-          verseCount: cached.verses.length,
-          copyright: '',
-        });
-        setVerses(cached.verses);
-        setError(null); // Clear error since we loaded from cache
-      } else {
-        setError(err instanceof Error ? err.message : 'Failed to fetch chapter');
-      }
+      setError(err instanceof Error ? err.message : 'Failed to fetch chapter');
     } finally {
       setLoadingChapter(false);
     }

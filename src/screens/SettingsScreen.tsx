@@ -11,13 +11,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { getSettings, saveSettings, BIBLE_VERSIONS, type AppSettings } from '../services/settings';
 import { getBookmarks, removeBookmark, type Bookmark } from '../services/bookmarks';
-import { bibleStorage } from '../services/bibleStorage';
 import { COLORS } from '../constants/colors';
 
 export default function SettingsScreen({ navigation }: any) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [cacheCount, setCacheCount] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -29,14 +27,12 @@ export default function SettingsScreen({ navigation }: any) {
   }, [navigation]);
 
   const loadData = async () => {
-    const [s, bm, cc] = await Promise.all([
+    const [s, bm] = await Promise.all([
       getSettings(),
       getBookmarks(),
-      bibleStorage.getCacheSize(),
     ]);
     setSettings(s);
     setBookmarks(bm);
-    setCacheCount(cc);
   };
 
   const handleFontSize = async (delta: number) => {
@@ -44,25 +40,6 @@ export default function SettingsScreen({ navigation }: any) {
     const newSize = Math.min(28, Math.max(14, settings.fontSize + delta));
     const updated = await saveSettings({ fontSize: newSize });
     setSettings(updated);
-  };
-
-  const handleVersionSelect = async (versionId: string, versionName: string) => {
-    const updated = await saveSettings({ bibleVersionId: versionId, bibleVersionName: versionName });
-    setSettings(updated);
-  };
-
-  const handleClearCache = () => {
-    Alert.alert('Clear Cache', 'Remove all cached chapters? You\'ll need internet to read them again.', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Clear',
-        style: 'destructive',
-        onPress: async () => {
-          await bibleStorage.clearAllCache();
-          setCacheCount(0);
-        },
-      },
-    ]);
   };
 
   const handleRemoveBookmark = (verseId: string) => {
@@ -123,22 +100,18 @@ export default function SettingsScreen({ navigation }: any) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Bible Version</Text>
           {BIBLE_VERSIONS.map((v) => (
-            <TouchableOpacity
+            <View
               key={v.id}
-              style={[styles.versionRow, settings.bibleVersionId === v.id && styles.versionRowActive]}
-              onPress={() => handleVersionSelect(v.id, v.name)}
-              activeOpacity={0.6}
+              style={[styles.versionRow, styles.versionRowActive]}
             >
               <View>
-                <Text style={[styles.versionName, settings.bibleVersionId === v.id && styles.versionNameActive]}>
+                <Text style={[styles.versionName, styles.versionNameActive]}>
                   {v.name}
                 </Text>
                 <Text style={styles.versionLabel}>{v.label}</Text>
               </View>
-              {settings.bibleVersionId === v.id && (
-                <Ionicons name="checkmark" size={20} color={COLORS.gold} />
-              )}
-            </TouchableOpacity>
+              <Ionicons name="checkmark" size={20} color={COLORS.gold} />
+            </View>
           ))}
         </View>
 
@@ -164,17 +137,6 @@ export default function SettingsScreen({ navigation }: any) {
               </TouchableOpacity>
             ))
           )}
-        </View>
-
-        {/* Cache */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Offline Cache</Text>
-          <View style={styles.cacheRow}>
-            <Text style={styles.cacheText}>{cacheCount} chapters cached</Text>
-            <TouchableOpacity onPress={handleClearCache} activeOpacity={0.6}>
-              <Text style={styles.clearCacheText}>Clear</Text>
-            </TouchableOpacity>
-          </View>
         </View>
 
         {/* About */}
@@ -220,9 +182,6 @@ const styles = StyleSheet.create({
   bookmarkRef: { fontSize: 13, fontWeight: '700', color: COLORS.gold, letterSpacing: 0.5, marginBottom: 2 },
   bookmarkText: { fontSize: 14, lineHeight: 20, color: COLORS.inkLight },
   emptyText: { fontSize: 14, color: COLORS.inkFaint, fontStyle: 'italic' },
-  cacheRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cacheText: { fontSize: 15, color: COLORS.ink },
-  clearCacheText: { fontSize: 13, fontWeight: '600', color: COLORS.red },
   aboutText: { fontSize: 16, fontWeight: '600', color: COLORS.ink, marginBottom: 4 },
   aboutVersion: { fontSize: 13, color: COLORS.inkFaint },
 });
