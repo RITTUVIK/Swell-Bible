@@ -27,3 +27,7 @@ export const getApiHeaders = () => ({
   'api-key': BIBLE_API_CONFIG.API_KEY,
   'Content-Type': 'application/json',
 });
+
+export const REWARDS_API_CONFIG = {
+  BASE_URL: process.env.EXPO_PUBLIC_REWARDS_API_URL || 'http://localhost:3000',
+};

@@ -10,6 +10,7 @@ import {
   Modal,
   ActivityIndicator,
   Clipboard,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +26,14 @@ import {
 import { connectPhantom, isPhantomInstalled } from '../services/phantomConnect';
 import { PublicKey } from '@solana/web3.js';
 import { getSwellBalance } from '../solana/balance';
-import { getStreakData } from '../services/streaks';
+import { getStreakData, migrateStreaksToWallet } from '../services/streaks';
+import {
+  isTodayClaimable,
+  claimReward,
+  ClaimResult,
+  getTotalEarned,
+  getUnclaimedDays,
+} from '../services/rewards';
 
 /**
  * Missions will be fetched from a real backend in the future.
@@ -59,15 +67,26 @@ export default function StewardshipScreen({ navigation }: any) {
   const [displayedYear, setDisplayedYear] = useState(() => new Date().getFullYear());
   const [displayedMonth, setDisplayedMonth] = useState(() => new Date().getMonth());
 
+  // Daily reward state
+  const [rewardClaimable, setRewardClaimable] = useState(false);
+  const [rewardReason, setRewardReason] = useState<string | undefined>();
+  const [claiming, setClaiming] = useState(false);
+  const [claimedToday, setClaimedToday] = useState(false);
+  const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
+  const [totalEarned, setTotalEarned] = useState(0);
+  const [unclaimedDays, setUnclaimedDays] = useState<string[]>([]);
+
   useEffect(() => {
     loadWallet();
     loadStreaks();
+    loadRewardStatus();
   }, []);
 
   useEffect(() => {
     const unsub = navigation?.addListener?.('focus', () => {
       loadWallet();
       loadStreaks();
+      loadRewardStatus();
     });
     return unsub;
   }, [navigation]);
@@ -78,6 +97,48 @@ export default function StewardshipScreen({ navigation }: any) {
     setGuidedStreak(data.guided);
     setAppDates(data.appDates);
     setGuidedDates(data.guidedDates);
+  };
+
+  const loadRewardStatus = async () => {
+    const [status, earned, unclaimed] = await Promise.all([
+      isTodayClaimable(),
+      getTotalEarned(),
+      getUnclaimedDays(),
+    ]);
+    setRewardClaimable(status.claimable);
+    setRewardReason(status.reason);
+    setClaimedToday(status.reason === 'already_claimed');
+    setTotalEarned(earned);
+    setUnclaimedDays(unclaimed);
+  };
+
+  const handleClaimReward = async (dateOverride?: string) => {
+    if (!walletAddress || claiming) return;
+    setClaiming(true);
+    setClaimResult(null);
+    try {
+      const result = await claimReward(walletAddress, dateOverride);
+      setClaimResult(result);
+      if (result.success) {
+        if (!dateOverride) {
+          setClaimedToday(true);
+          setRewardClaimable(false);
+        }
+        // Refresh balance after tx confirms on-chain
+        setTimeout(() => { if (walletAddress) fetchBalance(walletAddress); }, 3000);
+        setTimeout(() => { if (walletAddress) fetchBalance(walletAddress); }, 8000);
+        setTimeout(() => { if (walletAddress) fetchBalance(walletAddress); }, 15000);
+        // Refresh earned/unclaimed counts
+        getTotalEarned().then(setTotalEarned);
+        getUnclaimedDays().then(setUnclaimedDays);
+      } else {
+        Alert.alert('Claim Failed', result.error || 'Something went wrong.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to claim reward. Please try again.');
+    } finally {
+      setClaiming(false);
+    }
   };
 
   // Calendar: 6 rows × 7 cols (S M T W T F S). Uses displayed month/year.
@@ -134,6 +195,8 @@ export default function StewardshipScreen({ navigation }: any) {
       setWalletAddress(wallet.address);
       setWalletType(wallet.type);
       fetchBalance(wallet.address);
+      // Migrate any pre-wallet streaks into this wallet's data
+      await migrateStreaksToWallet();
     }
   };
 
@@ -211,6 +274,13 @@ export default function StewardshipScreen({ navigation }: any) {
           setWalletAddress(null);
           setWalletType(null);
           setBalance(null);
+          setRewardClaimable(false);
+          setRewardReason(undefined);
+          setClaiming(false);
+          setClaimedToday(false);
+          setClaimResult(null);
+          setTotalEarned(0);
+          setUnclaimedDays([]);
         },
       },
     ]);
@@ -377,6 +447,108 @@ export default function StewardshipScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* Daily Reward */}
+        <View style={styles.rewardSection}>
+          <View style={styles.rewardCard}>
+            <View style={styles.rewardHeader}>
+              <Ionicons name="gift-outline" size={22} color={COLORS.gold} />
+              <Text style={styles.rewardTitle}>Daily SWELL Reward</Text>
+            </View>
+            <Text style={styles.rewardDesc}>
+              Read the Bible each day to earn 1 SWELL token.
+            </Text>
+
+            {/* Total earned badge */}
+            {totalEarned > 0 && (
+              <View style={styles.rewardEarnedRow}>
+                <Ionicons name="trophy-outline" size={14} color={COLORS.gold} />
+                <Text style={styles.rewardEarnedText}>
+                  {totalEarned} SWELL earned to date
+                </Text>
+              </View>
+            )}
+
+            {!walletAddress ? (
+              <TouchableOpacity
+                style={[styles.rewardButton, styles.rewardButtonMuted]}
+                activeOpacity={0.6}
+                onPress={() => setShowConnectModal(true)}
+              >
+                <Ionicons name="wallet-outline" size={16} color={COLORS.inkLight} />
+                <Text style={styles.rewardButtonMutedText}>Connect Wallet to Claim</Text>
+              </TouchableOpacity>
+            ) : claimedToday ? (
+              <>
+                <View style={[styles.rewardButton, styles.rewardButtonClaimed]}>
+                  <Ionicons name="checkmark-circle" size={16} color={COLORS.inkLight} />
+                  <Text style={styles.rewardButtonMutedText}>Claimed Today</Text>
+                </View>
+                {claimResult?.signature && (
+                  <TouchableOpacity
+                    activeOpacity={0.6}
+                    onPress={() => {
+                      if (claimResult?.explorerUrl) {
+                        Linking.openURL(claimResult.explorerUrl);
+                      }
+                    }}
+                  >
+                    <Text style={styles.rewardTxLink}>
+                      tx: {claimResult.signature!.slice(0, 8)}...{claimResult.signature!.slice(-8)} - View on Explorer
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : claiming ? (
+              <View style={[styles.rewardButton, styles.rewardButtonMuted]}>
+                <ActivityIndicator size="small" color={COLORS.gold} />
+                <Text style={styles.rewardButtonMutedText}>Claiming...</Text>
+              </View>
+            ) : walletType === 'external' ? (
+              <View style={[styles.rewardButton, styles.rewardButtonMuted]}>
+                <Ionicons name="flash-outline" size={16} color={COLORS.inkFaint} />
+                <Text style={styles.rewardButtonDisabledText}>Use In-App Wallet to Claim</Text>
+              </View>
+            ) : rewardClaimable ? (
+              <TouchableOpacity
+                style={[styles.rewardButton, styles.rewardButtonGold]}
+                activeOpacity={0.6}
+                onPress={() => handleClaimReward()}
+              >
+                <Ionicons name="gift" size={16} color={COLORS.white} />
+                <Text style={styles.rewardButtonGoldText}>Claim 1 SWELL</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.rewardButton, styles.rewardButtonMuted]}>
+                <Ionicons name="book-outline" size={16} color={COLORS.inkFaint} />
+                <Text style={styles.rewardButtonDisabledText}>Read Today to Earn</Text>
+              </View>
+            )}
+
+            {/* Unclaimed past days */}
+            {walletAddress && walletType === 'embedded' && unclaimedDays.length > 0 && !claiming && (
+              <View style={styles.rewardUnclaimedSection}>
+                <Text style={styles.rewardUnclaimedLabel}>
+                  {unclaimedDays.length} unclaimed day{unclaimedDays.length !== 1 ? 's' : ''} (last 7 days)
+                </Text>
+                <View style={styles.rewardUnclaimedRow}>
+                  {unclaimedDays.map((date) => (
+                    <TouchableOpacity
+                      key={date}
+                      style={styles.rewardUnclaimedChip}
+                      activeOpacity={0.6}
+                      onPress={() => handleClaimReward(date)}
+                    >
+                      <Text style={styles.rewardUnclaimedChipText}>
+                        {date.slice(5)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
         {/* Streaks — reference style: pill title, headline, full month calendar, CTA card */}
         <View style={styles.streaksSection}>
           <View style={styles.streaksCard}>
@@ -525,8 +697,8 @@ export default function StewardshipScreen({ navigation }: any) {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Text style={styles.footerLabel}>Total Distributed to Date</Text>
-        <Text style={styles.footerAmount}>0 SWELL</Text>
+        <Text style={styles.footerLabel}>Total Earned to Date</Text>
+        <Text style={styles.footerAmount}>{totalEarned} SWELL</Text>
       </View>
 
       {/* ===== CONNECT WALLET MODAL ===== */}
@@ -684,6 +856,125 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingBottom: 20,
+  },
+
+  // Daily Reward
+  rewardSection: {
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 4,
+  },
+  rewardCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  rewardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  rewardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.ink,
+  },
+  rewardDesc: {
+    fontSize: 13,
+    color: COLORS.inkLight,
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  rewardButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  rewardButtonGold: {
+    backgroundColor: COLORS.gold,
+  },
+  rewardButtonGoldText: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: COLORS.white,
+  },
+  rewardButtonMuted: {
+    backgroundColor: COLORS.borderLight,
+  },
+  rewardButtonMutedText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.inkLight,
+  },
+  rewardButtonClaimed: {
+    backgroundColor: COLORS.borderLight,
+  },
+  rewardButtonDisabledText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.inkFaint,
+  },
+  rewardTxLink: {
+    fontSize: 11,
+    color: COLORS.gold,
+    textAlign: 'center',
+    marginTop: 8,
+    textDecorationLine: 'underline',
+  },
+  rewardEarnedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.bg,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  rewardEarnedText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.gold,
+  },
+  rewardUnclaimedSection: {
+    marginTop: 14,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.borderLight,
+  },
+  rewardUnclaimedLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.inkFaint,
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  rewardUnclaimedRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  rewardUnclaimedChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.gold,
+    backgroundColor: COLORS.white,
+  },
+  rewardUnclaimedChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.gold,
   },
 
   // Streaks — premium calendar-inspired

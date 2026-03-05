@@ -1,0 +1,6 @@
+{
+  "functions": {
+    "api/claim-reward.ts": { "maxDuration": 10 },
+    "api/claim-history.ts": { "maxDuration": 5 }
+  }
+}

@@ -10,8 +10,10 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getSavedWallet } from './walletContext';
 
-const STREAK_STORAGE_KEY = 'swell_bible_streaks';
+const STREAK_STORAGE_PREFIX = 'swell_bible_streaks:';
+const STREAK_STORAGE_KEY_LEGACY = 'swell_bible_streaks';
 const MAX_DAYS_STORED = 400;
 
 export interface StreakSnapshot {
@@ -30,11 +32,15 @@ export interface StreakData {
   appDates: string[];
   /** Raw dates with guided completion (for eligibility / debugging). */
   guidedDates: string[];
+  /** Dates user actually read scripture (ReadScreen or guided). For reward eligibility. */
+  readDates: string[];
 }
 
 interface StoredStreaks {
   appDates: string[];
   guidedDates: string[];
+  /** Dates the user actually read scripture (ReadScreen or guided). Used for reward eligibility. */
+  readDates?: string[];
 }
 
 function formatLocalDate(d: Date): string {
@@ -114,14 +120,22 @@ function computeBestStreak(dates: string[]): number {
   return best;
 }
 
+async function getStorageKey(): Promise<string> {
+  const wallet = await getSavedWallet();
+  if (wallet.address) return `${STREAK_STORAGE_PREFIX}${wallet.address}`;
+  return STREAK_STORAGE_KEY_LEGACY;
+}
+
 async function loadStored(): Promise<StoredStreaks> {
   try {
-    const raw = await AsyncStorage.getItem(STREAK_STORAGE_KEY);
+    const key = await getStorageKey();
+    const raw = await AsyncStorage.getItem(key);
     if (!raw) return { appDates: [], guidedDates: [] };
     const parsed = JSON.parse(raw) as StoredStreaks;
     return {
       appDates: Array.isArray(parsed.appDates) ? parsed.appDates : [],
       guidedDates: Array.isArray(parsed.guidedDates) ? parsed.guidedDates : [],
+      readDates: Array.isArray(parsed.readDates) ? parsed.readDates : [],
     };
   } catch {
     return { appDates: [], guidedDates: [] };
@@ -130,7 +144,8 @@ async function loadStored(): Promise<StoredStreaks> {
 
 async function saveStored(data: StoredStreaks): Promise<void> {
   try {
-    await AsyncStorage.setItem(STREAK_STORAGE_KEY, JSON.stringify(data));
+    const key = await getStorageKey();
+    await AsyncStorage.setItem(key, JSON.stringify(data));
   } catch {
     // Non-critical
   }
@@ -146,8 +161,11 @@ function trimToMax(dates: string[]): string[] {
  * Record that the user used the app in a meaningful way today
  * (read scripture, viewed a verse, or completed guided scripture).
  * Call once per day from Home (verse viewed), Read (chapter loaded), or Guided (completed).
+ * No-op if no wallet is connected (streaks are per-wallet).
  */
 export async function recordAppActivity(): Promise<void> {
+  const wallet = await getSavedWallet();
+  if (!wallet.address) return;
   const today = getTodayDateString();
   const { appDates, guidedDates } = await loadStored();
   if (appDates.includes(today)) return;
@@ -156,16 +174,36 @@ export async function recordAppActivity(): Promise<void> {
 }
 
 /**
+ * Record that the user actually read scripture today (loaded a chapter in ReadScreen).
+ * This is stricter than recordAppActivity and is used for reward eligibility.
+ * No-op if no wallet is connected.
+ */
+export async function recordReadActivity(): Promise<void> {
+  const wallet = await getSavedWallet();
+  if (!wallet.address) return;
+  const today = getTodayDateString();
+  const stored = await loadStored();
+  if (stored.readDates?.includes(today)) return;
+  const readDates = trimToMax([...(stored.readDates || []), today]);
+  const appUpdated = stored.appDates.includes(today) ? stored.appDates : trimToMax([...stored.appDates, today]);
+  await saveStored({ ...stored, appDates: appUpdated, readDates });
+}
+
+/**
  * Record that the user completed the full guided scripture experience today.
  * Call when they finish the guided flow (verse + reflection/prayer + complete).
- * Also counts as app activity (call recordAppActivity or we can call it here).
+ * Also counts as app activity and read activity.
+ * No-op if no wallet is connected.
  */
 export async function recordGuidedScriptureComplete(): Promise<void> {
+  const wallet = await getSavedWallet();
+  if (!wallet.address) return;
   const today = getTodayDateString();
-  const { appDates, guidedDates } = await loadStored();
-  const guidedUpdated = guidedDates.includes(today) ? guidedDates : trimToMax([...guidedDates, today]);
-  const appUpdated = appDates.includes(today) ? appDates : trimToMax([...appDates, today]);
-  await saveStored({ appDates: appUpdated, guidedDates: guidedUpdated });
+  const stored = await loadStored();
+  const guidedUpdated = stored.guidedDates.includes(today) ? stored.guidedDates : trimToMax([...stored.guidedDates, today]);
+  const appUpdated = stored.appDates.includes(today) ? stored.appDates : trimToMax([...stored.appDates, today]);
+  const readUpdated = stored.readDates?.includes(today) ? stored.readDates : trimToMax([...(stored.readDates || []), today]);
+  await saveStored({ appDates: appUpdated, guidedDates: guidedUpdated, readDates: readUpdated });
 }
 
 /**
@@ -191,9 +229,52 @@ export async function getGuidedStreak(): Promise<StreakSnapshot> {
  * Use lastAppDate / lastGuidedDate and appDates / guidedDates to check
  * "has user maintained N-day streak" without building reward logic now.
  */
+/**
+ * Migrate legacy (pre-wallet) streak data into the current wallet's key.
+ * Call once after a wallet is connected to preserve any reading done before connecting.
+ * Merges dates — safe to call multiple times.
+ */
+export async function migrateStreaksToWallet(): Promise<void> {
+  const wallet = await getSavedWallet();
+  if (!wallet.address) return;
+
+  const walletKey = `${STREAK_STORAGE_PREFIX}${wallet.address}`;
+
+  try {
+    const legacyRaw = await AsyncStorage.getItem(STREAK_STORAGE_KEY_LEGACY);
+    if (!legacyRaw) return;
+
+    const legacy = JSON.parse(legacyRaw) as StoredStreaks;
+    if (!legacy.appDates?.length && !legacy.guidedDates?.length && !legacy.readDates?.length) return;
+
+    // Load existing wallet streaks
+    const existingRaw = await AsyncStorage.getItem(walletKey);
+    const existing: StoredStreaks = existingRaw
+      ? JSON.parse(existingRaw)
+      : { appDates: [], guidedDates: [], readDates: [] };
+
+    // Merge (deduplicate)
+    const mergeUnique = (a: string[], b: string[]) => [...new Set([...a, ...b])].sort();
+
+    const merged: StoredStreaks = {
+      appDates: trimToMax(mergeUnique(existing.appDates || [], legacy.appDates || [])),
+      guidedDates: trimToMax(mergeUnique(existing.guidedDates || [], legacy.guidedDates || [])),
+      readDates: trimToMax(mergeUnique(existing.readDates || [], legacy.readDates || [])),
+    };
+
+    await AsyncStorage.setItem(walletKey, JSON.stringify(merged));
+    // Clear legacy key so we don't migrate again
+    await AsyncStorage.removeItem(STREAK_STORAGE_KEY_LEGACY);
+  } catch {
+    // Non-critical
+  }
+}
+
 export async function getStreakData(): Promise<StreakData> {
   const today = getTodayDateString();
-  const { appDates, guidedDates } = await loadStored();
+  const stored = await loadStored();
+  const { appDates, guidedDates } = stored;
+  const readDates = stored.readDates || [];
   const app = computeStreaks(appDates, today);
   const guided = computeStreaks(guidedDates, today);
   const sortedApp = [...appDates].sort();
@@ -205,5 +286,6 @@ export async function getStreakData(): Promise<StreakData> {
     lastGuidedDate: sortedGuided.length > 0 ? sortedGuided[sortedGuided.length - 1] : null,
     appDates,
     guidedDates,
+    readDates,
   };
 }
