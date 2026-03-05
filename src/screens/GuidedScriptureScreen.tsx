@@ -12,9 +12,51 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../constants/colors';
 import { bibleApi } from '../services/bibleApi';
 import { recordGuidedScriptureComplete } from '../services/streaks';
+
+const REFLECTION_STORAGE_KEY = 'swell_bible_guided_reflections';
+
+function getTodayDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+async function loadTodaysReflection(): Promise<string | null> {
+  try {
+    const raw = await AsyncStorage.getItem(REFLECTION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed[getTodayDateString()] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function saveTodaysReflection(text: string): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(REFLECTION_STORAGE_KEY);
+    const existing: Record<string, string> = raw ? JSON.parse(raw) : {};
+    existing[getTodayDateString()] = text;
+    // Keep only the last 30 days
+    const keys = Object.keys(existing).sort();
+    if (keys.length > 30) {
+      keys.slice(0, keys.length - 30).forEach(k => delete existing[k]);
+    }
+    await AsyncStorage.setItem(REFLECTION_STORAGE_KEY, JSON.stringify(existing));
+  } catch {
+    /* non-critical */
+  }
+}
+
+function countWords(text: string): number {
+  return text.trim().split(/\s+/).filter(w => w.length > 0).length;
+}
 
 const DAILY_VERSES = [
   { id: 'PSA.27.1', reference: 'Psalm 27:1' },
@@ -48,6 +90,7 @@ export default function GuidedScriptureScreen({ navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState(false);
   const [reflection, setReflection] = useState('');
+  const [reflectionError, setReflectionError] = useState<string | null>(null);
 
   useEffect(() => {
     loadVerse();
@@ -74,8 +117,14 @@ export default function GuidedScriptureScreen({ navigation }: any) {
   };
 
   const handleComplete = async () => {
+    if (countWords(reflection) < 3) {
+      setReflectionError('A sincere reflection is required. Your response is too short.');
+      return;
+    }
+    setReflectionError(null);
     setCompleting(true);
     try {
+      await saveTodaysReflection(reflection);
       await recordGuidedScriptureComplete();
       navigation?.goBack?.();
     } finally {
@@ -128,17 +177,23 @@ export default function GuidedScriptureScreen({ navigation }: any) {
           <View style={styles.reflectionBlock}>
             <Text style={styles.reflectionLabel}>Reflect or pray</Text>
             <Text style={styles.reflectionHint}>
-              Optional: write a short reflection or prayer. Completing this step counts toward your Guided Scripture streak.
+              Write a short reflection or prayer (at least 3 words). Completing this step counts toward your Guided Scripture streak.
             </Text>
             <TextInput
-              style={styles.reflectionInput}
+              style={[styles.reflectionInput, reflectionError ? styles.reflectionInputError : null]}
               placeholder="Your reflection..."
               placeholderTextColor={COLORS.inkFaint}
               value={reflection}
-              onChangeText={setReflection}
+              onChangeText={text => {
+                setReflection(text);
+                if (reflectionError) setReflectionError(null);
+              }}
               multiline
               numberOfLines={4}
             />
+            {reflectionError ? (
+              <Text style={styles.reflectionError}>{reflectionError}</Text>
+            ) : null}
           </View>
 
           <TouchableOpacity
@@ -246,6 +301,15 @@ const styles = StyleSheet.create({
     color: COLORS.ink,
     minHeight: 100,
     textAlignVertical: 'top',
+  },
+  reflectionInputError: {
+    borderColor: COLORS.red,
+  },
+  reflectionError: {
+    marginTop: 8,
+    fontSize: 12,
+    color: COLORS.red,
+    lineHeight: 18,
   },
   completeBtn: {
     backgroundColor: COLORS.ink,

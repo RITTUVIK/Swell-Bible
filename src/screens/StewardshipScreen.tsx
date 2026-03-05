@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Clipboard,
   Linking,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -51,6 +52,7 @@ export default function StewardshipScreen({ navigation }: any) {
   const [walletType, setWalletType] = useState<WalletType | null>(null);
   const [balance, setBalance] = useState<string | null>(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [balanceError, setBalanceError] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
   const [connectingPhantom, setConnectingPhantom] = useState(false);
@@ -66,8 +68,12 @@ export default function StewardshipScreen({ navigation }: any) {
   const [guidedDates, setGuidedDates] = useState<string[]>([]);
   const [displayedYear, setDisplayedYear] = useState(() => new Date().getFullYear());
   const [displayedMonth, setDisplayedMonth] = useState(() => new Date().getMonth());
+  const [backupKeyModalVisible, setBackupKeyModalVisible] = useState(false);
+  const [backupKeyCopied, setBackupKeyCopied] = useState(false);
+  const [disconnectModalVisible, setDisconnectModalVisible] = useState(false);
+  const backupKeyRef = useRef<string | null>(null);
 
-  // Daily reward state
+  // Daily reward state (real Vercel-backed system)
   const [rewardClaimable, setRewardClaimable] = useState(false);
   const [rewardReason, setRewardReason] = useState<string | undefined>();
   const [claiming, setClaiming] = useState(false);
@@ -91,6 +97,11 @@ export default function StewardshipScreen({ navigation }: any) {
     return unsub;
   }, [navigation]);
 
+  const getTodayDateString = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const loadStreaks = async () => {
     const data = await getStreakData();
     setAppStreak(data.app);
@@ -98,6 +109,8 @@ export default function StewardshipScreen({ navigation }: any) {
     setAppDates(data.appDates);
     setGuidedDates(data.guidedDates);
   };
+
+  const guidedCompletedToday = guidedDates.includes(getTodayDateString());
 
   const loadRewardStatus = async () => {
     const [status, earned, unclaimed] = await Promise.all([
@@ -141,7 +154,7 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   };
 
-  // Calendar: 6 rows × 7 cols (S M T W T F S). Uses displayed month/year.
+  // Calendar: 6 rows x 7 cols (S M T W T F S). Uses displayed month/year.
   const monthNames = ['JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE', 'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'];
   const weekLetters = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const now = new Date();
@@ -197,17 +210,31 @@ export default function StewardshipScreen({ navigation }: any) {
       fetchBalance(wallet.address);
       // Migrate any pre-wallet streaks into this wallet's data
       await migrateStreaksToWallet();
+    } else {
+      setWalletAddress(null);
+      setWalletType(null);
+      setBalance(null);
+      setBalanceError(false);
+      // Reset reward state when no wallet
+      setRewardClaimable(false);
+      setRewardReason(undefined);
+      setClaimedToday(false);
+      setClaimResult(null);
+      setTotalEarned(0);
+      setUnclaimedDays([]);
     }
   };
 
   const fetchBalance = async (address: string) => {
     setLoadingBalance(true);
+    setBalanceError(false);
     try {
       const pubkey = new PublicKey(address);
       const result = await getSwellBalance(pubkey);
       setBalance(result.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     } catch {
-      setBalance('0.00');
+      setBalanceError(true);
+      setBalance(null);
     } finally {
       setLoadingBalance(false);
     }
@@ -258,63 +285,71 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   }, []);
 
-  // ---- Disconnect ----
-  const handleDisconnect = () => {
-    const message = walletType === 'embedded'
+  // Clipboard that works on web (navigator.clipboard) and native
+  const copyToClipboard = useCallback(async (text: string) => {
+    if (Platform.OS === 'web' && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      Clipboard.setString(text);
+    }
+  }, []);
+
+  // ---- Disconnect (in-app modal on all platforms) ----
+  const handleDisconnect = useCallback(() => {
+    setDisconnectModalVisible(true);
+  }, []);
+
+  const confirmDisconnect = useCallback(async () => {
+    await disconnectWallet();
+    setWalletAddress(null);
+    setWalletType(null);
+    setBalance(null);
+    setBalanceError(false);
+    setDisconnectModalVisible(false);
+    // Reset reward state
+    setRewardClaimable(false);
+    setRewardReason(undefined);
+    setClaiming(false);
+    setClaimedToday(false);
+    setClaimResult(null);
+    setTotalEarned(0);
+    setUnclaimedDays([]);
+  }, []);
+
+  const disconnectMessage =
+    walletType === 'embedded'
       ? 'Disconnect your wallet? Make sure you have backed up your private key first.'
       : 'Remove this wallet connection from the app?';
 
-    Alert.alert('Disconnect Wallet', message, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Disconnect',
-        style: 'destructive',
-        onPress: async () => {
-          await disconnectWallet();
-          setWalletAddress(null);
-          setWalletType(null);
-          setBalance(null);
-          setRewardClaimable(false);
-          setRewardReason(undefined);
-          setClaiming(false);
-          setClaimedToday(false);
-          setClaimResult(null);
-          setTotalEarned(0);
-          setUnclaimedDays([]);
-        },
-      },
-    ]);
-  };
-
   // ---- Copy Address ----
-  const handleCopyAddress = () => {
+  const handleCopyAddress = useCallback(() => {
     if (walletAddress) {
-      Clipboard.setString(walletAddress);
+      copyToClipboard(walletAddress);
       Alert.alert('Copied', 'Wallet address copied to clipboard.');
     }
-  };
+  }, [walletAddress, copyToClipboard]);
 
-  // ---- Export Key ----
-  const handleExportKey = async () => {
+  // ---- Export Key (in-app modal on all platforms) ----
+  const handleExportKey = useCallback(async () => {
     if (walletType !== 'embedded') return;
     const secretKey = await getEmbeddedSecretKey();
-    if (secretKey) {
-      Alert.alert(
-        'Private Key Backup',
-        'Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Copy Key',
-            onPress: () => {
-              Clipboard.setString(secretKey);
-              Alert.alert('Copied', 'Private key copied to clipboard. Store it somewhere safe.');
-            },
-          },
-        ]
-      );
-    }
-  };
+    if (!secretKey) return;
+    backupKeyRef.current = secretKey;
+    setBackupKeyCopied(false);
+    setBackupKeyModalVisible(true);
+  }, [walletType]);
+
+  const handleBackupKeyCopy = useCallback(async () => {
+    if (!backupKeyRef.current) return;
+    await copyToClipboard(backupKeyRef.current);
+    setBackupKeyCopied(true);
+  }, [copyToClipboard]);
+
+  const closeBackupKeyModal = useCallback(() => {
+    setBackupKeyModalVisible(false);
+    backupKeyRef.current = null;
+    setBackupKeyCopied(false);
+  }, []);
 
   // ---- Donate ----
   const handleDonate = (mission: typeof MISSIONS[0]) => {
@@ -390,10 +425,14 @@ export default function StewardshipScreen({ navigation }: any) {
               <Text style={styles.balanceLabel}>Current Stewardship Balance</Text>
               {loadingBalance ? (
                 <ActivityIndicator size="small" color={COLORS.gold} style={{ marginVertical: 20 }} />
+              ) : balanceError ? (
+                <Text style={styles.balanceError}>Unable to fetch balance</Text>
               ) : (
-                <Text style={styles.balanceAmount}>{balance || '0.00'}</Text>
+                <>
+                  <Text style={styles.balanceAmount}>{balance ?? '0.00'}</Text>
+                  <Text style={styles.balanceCurrency}>SWELL</Text>
+                </>
               )}
-              <Text style={styles.balanceCurrency}>SWELL</Text>
 
               <TouchableOpacity onPress={handleCopyAddress} activeOpacity={0.6}>
                 <View style={styles.walletBadgeRow}>
@@ -642,13 +681,25 @@ export default function StewardshipScreen({ navigation }: any) {
           </View>
 
           <TouchableOpacity
-            style={styles.guidedCtaCard}
+            style={[styles.guidedCtaCard, guidedCompletedToday && styles.guidedCtaCardDone]}
             activeOpacity={0.6}
-            onPress={() => navigation?.navigate?.('GuidedScripture')}
+            onPress={() => {
+              if (guidedCompletedToday) {
+                Alert.alert('Already completed', 'You have already completed today\'s reflection.');
+              } else {
+                navigation?.navigate?.('GuidedScripture');
+              }
+            }}
           >
-            <Ionicons name="book-outline" size={20} color={COLORS.gold} />
-            <Text style={styles.guidedCtaCardText}>Start guided reflection to extend your streak</Text>
-            <Ionicons name="chevron-forward" size={18} color={COLORS.inkLight} />
+            <Ionicons
+              name={guidedCompletedToday ? 'checkmark-circle' : 'book-outline'}
+              size={20}
+              color={guidedCompletedToday ? COLORS.gold : COLORS.gold}
+            />
+            <Text style={[styles.guidedCtaCardText, guidedCompletedToday && styles.guidedCtaCardTextDone]}>
+              {guidedCompletedToday ? 'Guided reflection completed' : 'Start guided reflection to extend your streak'}
+            </Text>
+            {!guidedCompletedToday && <Ionicons name="chevron-forward" size={18} color={COLORS.inkLight} />}
           </TouchableOpacity>
         </View>
 
@@ -776,6 +827,86 @@ export default function StewardshipScreen({ navigation }: any) {
         </View>
       </Modal>
 
+      {/* ===== BACKUP KEY MODAL (in-app, no browser confirm) ===== */}
+      <Modal
+        visible={backupKeyModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeBackupKeyModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Private Key Backup</Text>
+              <TouchableOpacity onPress={closeBackupKeyModal} activeOpacity={0.6}>
+                <Ionicons name="close" size={22} color={COLORS.inkLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalDesc}>
+              Your private key will be copied to clipboard. Store it safely and NEVER share it with anyone.
+            </Text>
+            {backupKeyCopied ? (
+              <View style={styles.backupKeySuccessRow}>
+                <Ionicons name="checkmark-circle" size={22} color={COLORS.gold} />
+                <Text style={styles.backupKeySuccessText}>Copied. Store it somewhere safe.</Text>
+              </View>
+            ) : null}
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={closeBackupKeyModal}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalConfirm}
+                onPress={handleBackupKeyCopy}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalConfirmText}>Copy Key</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ===== DISCONNECT WALLET MODAL (in-app, no browser confirm) ===== */}
+      <Modal
+        visible={disconnectModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDisconnectModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Disconnect Wallet</Text>
+              <TouchableOpacity onPress={() => setDisconnectModalVisible(false)} activeOpacity={0.6}>
+                <Ionicons name="close" size={22} color={COLORS.inkLight} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalDesc}>{disconnectMessage}</Text>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.modalCancel}
+                onPress={() => setDisconnectModalVisible(false)}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirm, styles.disconnectConfirm]}
+                onPress={confirmDisconnect}
+                activeOpacity={0.6}
+              >
+                <Text style={styles.modalConfirmText}>Disconnect</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* ===== DONATE MODAL ===== */}
       <Modal
         visible={donateModal.visible}
@@ -797,11 +928,13 @@ export default function StewardshipScreen({ navigation }: any) {
               onChangeText={setDonateAmount}
               keyboardType="decimal-pad"
             />
-            {balance && (
+            {balanceError ? (
+              <Text style={styles.modalBalanceError}>Unable to fetch balance</Text>
+            ) : balance != null ? (
               <Text style={styles.modalBalance}>
                 Balance: {balance} SWELL
               </Text>
-            )}
+            ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancel}
@@ -1173,11 +1306,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.border,
   },
+  guidedCtaCardDone: {
+    backgroundColor: COLORS.bg,
+    borderColor: COLORS.goldLight,
+  },
   guidedCtaCardText: {
     flex: 1,
     fontSize: 13,
     color: COLORS.ink,
     fontWeight: '500',
+  },
+  guidedCtaCardTextDone: {
+    color: COLORS.gold,
   },
   guidedCta: {
     flexDirection: 'row',
@@ -1222,6 +1362,13 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     color: COLORS.gold,
     marginTop: 4,
+  },
+  balanceError: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: COLORS.inkLight,
+    fontStyle: 'italic',
+    marginVertical: 8,
   },
   walletBadgeRow: {
     flexDirection: 'row',
@@ -1512,6 +1659,23 @@ const styles = StyleSheet.create({
     color: COLORS.inkFaint,
     marginBottom: 8,
   },
+  modalBalanceError: {
+    fontSize: 12,
+    color: COLORS.inkLight,
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  backupKeySuccessRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  backupKeySuccessText: {
+    fontSize: 14,
+    color: COLORS.ink,
+    fontWeight: '500',
+  },
   modalActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
@@ -1537,5 +1701,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: COLORS.white,
+  },
+  disconnectConfirm: {
+    backgroundColor: COLORS.red,
   },
 });

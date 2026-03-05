@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BIBLE_BOOKS, type BibleBookInfo } from '../constants/bibleBooks';
 import { bibleApi } from '../services/bibleApi';
-import { BIBLE_API_CONFIG, getApiHeaders } from '../config/api';
 import { COLORS } from '../constants/colors';
 
 interface SearchResult {
@@ -58,23 +57,12 @@ export default function SearchScreen({ navigation }: any) {
     setHasSearched(true);
 
     try {
-      const response = await fetch(
-        `${BIBLE_API_CONFIG.BASE_URL}/bibles/${BIBLE_API_CONFIG.DEFAULT_BIBLE_ID}/search?query=${encodeURIComponent(query)}&limit=20`,
-        { headers: getApiHeaders() }
-      );
-
-      if (!response.ok) {
-        setResults([]);
-        return;
-      }
-
-      const data = await response.json();
-      const verses = data.data?.verses || [];
+      const verses = bibleApi.searchVerses(query.trim(), 20);
       setResults(
-        verses.map((v: any) => ({
+        verses.map(v => ({
           verseId: v.id,
           reference: v.reference,
-          content: (v.text || '').replace(/<[^>]+>/g, '').trim(),
+          content: v.content,
           bookId: v.bookId,
         }))
       );

@@ -1,331 +1,328 @@
-import { BIBLE_API_CONFIG, getApiHeaders } from '../config/api';
+/**
+ * Bible Service — Local KJV Data
+ *
+ * Reads Bible data from bundled JSON files (data/bible/Bible-kjv-1611/).
+ * Returns the same types the old API service returned so all screens work unchanged.
+ */
+
 import type {
-  Bible,
   Book,
   Chapter,
   ChapterContent,
   Verse,
 } from '../types/bible';
+import { BIBLE_BOOKS, getBookById } from '../constants/bibleBooks';
 
-/**
- * Bible API Service
- * Handles all interactions with the api.bible API
- * 
- * API Documentation: https://docs.api.bible/
- */
+// ---------------------------------------------------------------------------
+// JSON shapes (matches the local files)
+// ---------------------------------------------------------------------------
 
-const REQUEST_TIMEOUT_MS = 15000;
-const MAX_RETRIES = 2;
-const RETRY_DELAY_MS = 1500;
+interface JsonVerse {
+  verse: number;
+  text: string;
+}
+
+interface JsonChapter {
+  chapter: number;
+  verses: JsonVerse[];
+}
+
+interface JsonBook {
+  book: string;
+  'chapter-count': string;
+  chapters: JsonChapter[];
+}
+
+// ---------------------------------------------------------------------------
+// ID ↔ filename mapping
+// ---------------------------------------------------------------------------
+
+const ID_TO_FILENAME: Record<string, string> = {
+  GEN: 'Genesis', EXO: 'Exodus', LEV: 'Leviticus', NUM: 'Numbers',
+  DEU: 'Deuteronomy', JOS: 'Joshua', JDG: 'Judges', RUT: 'Ruth',
+  '1SA': '1 Samuel', '2SA': '2 Samuel', '1KI': '1 Kings', '2KI': '2 Kings',
+  '1CH': '1 Chronicles', '2CH': '2 Chronicles', EZR: 'Ezra', NEH: 'Nehemiah',
+  EST: 'Esther', JOB: 'Job', PSA: 'Psalms', PRO: 'Proverbs',
+  ECC: 'Ecclesiastes', SNG: 'Song of Solomon', ISA: 'Isaiah', JER: 'Jeremiah',
+  LAM: 'Lamentations', EZK: 'Ezekiel', DAN: 'Daniel', HOS: 'Hosea',
+  JOL: 'Joel', AMO: 'Amos', OBA: 'Obadiah', JON: 'Jonah',
+  MIC: 'Micah', NAM: 'Nahum', HAB: 'Habakkuk', ZEP: 'Zephaniah',
+  HAG: 'Haggai', ZEC: 'Zechariah', MAL: 'Malachi',
+  MAT: 'Matthew', MRK: 'Mark', LUK: 'Luke', JHN: 'John',
+  ACT: 'Acts', ROM: 'Romans', '1CO': '1 Corinthians', '2CO': '2 Corinthians',
+  GAL: 'Galatians', EPH: 'Ephesians', PHP: 'Philippians', COL: 'Colossians',
+  '1TH': '1 Thessalonians', '2TH': '2 Thessalonians',
+  '1TI': '1 Timothy', '2TI': '2 Timothy', TIT: 'Titus', PHM: 'Philemon',
+  HEB: 'Hebrews', JAS: 'James', '1PE': '1 Peter', '2PE': '2 Peter',
+  '1JN': '1 John', '2JN': '2 John', '3JN': '3 John',
+  JUD: 'Jude', REV: 'Revelation',
+};
+
+// ---------------------------------------------------------------------------
+// Require map — Metro needs static require() calls
+// ---------------------------------------------------------------------------
+
+const BOOK_DATA: Record<string, () => JsonBook> = {
+  GEN: () => require('../../data/bible/Bible-kjv-1611/Genesis.json'),
+  EXO: () => require('../../data/bible/Bible-kjv-1611/Exodus.json'),
+  LEV: () => require('../../data/bible/Bible-kjv-1611/Leviticus.json'),
+  NUM: () => require('../../data/bible/Bible-kjv-1611/Numbers.json'),
+  DEU: () => require('../../data/bible/Bible-kjv-1611/Deuteronomy.json'),
+  JOS: () => require('../../data/bible/Bible-kjv-1611/Joshua.json'),
+  JDG: () => require('../../data/bible/Bible-kjv-1611/Judges.json'),
+  RUT: () => require('../../data/bible/Bible-kjv-1611/Ruth.json'),
+  '1SA': () => require('../../data/bible/Bible-kjv-1611/1 Samuel.json'),
+  '2SA': () => require('../../data/bible/Bible-kjv-1611/2 Samuel.json'),
+  '1KI': () => require('../../data/bible/Bible-kjv-1611/1 Kings.json'),
+  '2KI': () => require('../../data/bible/Bible-kjv-1611/2 Kings.json'),
+  '1CH': () => require('../../data/bible/Bible-kjv-1611/1 Chronicles.json'),
+  '2CH': () => require('../../data/bible/Bible-kjv-1611/2 Chronicles.json'),
+  EZR: () => require('../../data/bible/Bible-kjv-1611/Ezra.json'),
+  NEH: () => require('../../data/bible/Bible-kjv-1611/Nehemiah.json'),
+  EST: () => require('../../data/bible/Bible-kjv-1611/Esther.json'),
+  JOB: () => require('../../data/bible/Bible-kjv-1611/Job.json'),
+  PSA: () => require('../../data/bible/Bible-kjv-1611/Psalms.json'),
+  PRO: () => require('../../data/bible/Bible-kjv-1611/Proverbs.json'),
+  ECC: () => require('../../data/bible/Bible-kjv-1611/Ecclesiastes.json'),
+  SNG: () => require('../../data/bible/Bible-kjv-1611/Song of Solomon.json'),
+  ISA: () => require('../../data/bible/Bible-kjv-1611/Isaiah.json'),
+  JER: () => require('../../data/bible/Bible-kjv-1611/Jeremiah.json'),
+  LAM: () => require('../../data/bible/Bible-kjv-1611/Lamentations.json'),
+  EZK: () => require('../../data/bible/Bible-kjv-1611/Ezekiel.json'),
+  DAN: () => require('../../data/bible/Bible-kjv-1611/Daniel.json'),
+  HOS: () => require('../../data/bible/Bible-kjv-1611/Hosea.json'),
+  JOL: () => require('../../data/bible/Bible-kjv-1611/Joel.json'),
+  AMO: () => require('../../data/bible/Bible-kjv-1611/Amos.json'),
+  OBA: () => require('../../data/bible/Bible-kjv-1611/Obadiah.json'),
+  JON: () => require('../../data/bible/Bible-kjv-1611/Jonah.json'),
+  MIC: () => require('../../data/bible/Bible-kjv-1611/Micah.json'),
+  NAM: () => require('../../data/bible/Bible-kjv-1611/Nahum.json'),
+  HAB: () => require('../../data/bible/Bible-kjv-1611/Habakkuk.json'),
+  ZEP: () => require('../../data/bible/Bible-kjv-1611/Zephaniah.json'),
+  HAG: () => require('../../data/bible/Bible-kjv-1611/Haggai.json'),
+  ZEC: () => require('../../data/bible/Bible-kjv-1611/Zechariah.json'),
+  MAL: () => require('../../data/bible/Bible-kjv-1611/Malachi.json'),
+  MAT: () => require('../../data/bible/Bible-kjv-1611/Matthew.json'),
+  MRK: () => require('../../data/bible/Bible-kjv-1611/Mark.json'),
+  LUK: () => require('../../data/bible/Bible-kjv-1611/Luke.json'),
+  JHN: () => require('../../data/bible/Bible-kjv-1611/John.json'),
+  ACT: () => require('../../data/bible/Bible-kjv-1611/Acts.json'),
+  ROM: () => require('../../data/bible/Bible-kjv-1611/Romans.json'),
+  '1CO': () => require('../../data/bible/Bible-kjv-1611/1 Corinthians.json'),
+  '2CO': () => require('../../data/bible/Bible-kjv-1611/2 Corinthians.json'),
+  GAL: () => require('../../data/bible/Bible-kjv-1611/Galatians.json'),
+  EPH: () => require('../../data/bible/Bible-kjv-1611/Ephesians.json'),
+  PHP: () => require('../../data/bible/Bible-kjv-1611/Philippians.json'),
+  COL: () => require('../../data/bible/Bible-kjv-1611/Colossians.json'),
+  '1TH': () => require('../../data/bible/Bible-kjv-1611/1 Thessalonians.json'),
+  '2TH': () => require('../../data/bible/Bible-kjv-1611/2 Thessalonians.json'),
+  '1TI': () => require('../../data/bible/Bible-kjv-1611/1 Timothy.json'),
+  '2TI': () => require('../../data/bible/Bible-kjv-1611/2 Timothy.json'),
+  TIT: () => require('../../data/bible/Bible-kjv-1611/Titus.json'),
+  PHM: () => require('../../data/bible/Bible-kjv-1611/Philemon.json'),
+  HEB: () => require('../../data/bible/Bible-kjv-1611/Hebrews.json'),
+  JAS: () => require('../../data/bible/Bible-kjv-1611/James.json'),
+  '1PE': () => require('../../data/bible/Bible-kjv-1611/1 Peter.json'),
+  '2PE': () => require('../../data/bible/Bible-kjv-1611/2 Peter.json'),
+  '1JN': () => require('../../data/bible/Bible-kjv-1611/1 John.json'),
+  '2JN': () => require('../../data/bible/Bible-kjv-1611/2 John.json'),
+  '3JN': () => require('../../data/bible/Bible-kjv-1611/3 John.json'),
+  JUD: () => require('../../data/bible/Bible-kjv-1611/Jude.json'),
+  REV: () => require('../../data/bible/Bible-kjv-1611/Revelation.json'),
+};
+
+const LOCAL_BIBLE_ID = 'kjv-1611-local';
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+function loadBook(bookId: string): JsonBook {
+  const loader = BOOK_DATA[bookId];
+  if (!loader) throw new Error(`Unknown book ID: ${bookId}`);
+  return loader();
+}
+
+function getNextChapter(bookId: string, chapter: number): { id: string; bookId: string; number: string } | undefined {
+  const info = getBookById(bookId);
+  if (!info) return undefined;
+
+  if (chapter < info.chapters) {
+    return { id: `${bookId}.${chapter + 1}`, bookId, number: String(chapter + 1) };
+  }
+
+  const idx = BIBLE_BOOKS.findIndex(b => b.id === bookId);
+  if (idx < BIBLE_BOOKS.length - 1) {
+    const next = BIBLE_BOOKS[idx + 1];
+    return { id: `${next.id}.1`, bookId: next.id, number: '1' };
+  }
+
+  return undefined;
+}
+
+function getPreviousChapter(bookId: string, chapter: number): { id: string; bookId: string; number: string } | undefined {
+  if (chapter > 1) {
+    return { id: `${bookId}.${chapter - 1}`, bookId, number: String(chapter - 1) };
+  }
+
+  const idx = BIBLE_BOOKS.findIndex(b => b.id === bookId);
+  if (idx > 0) {
+    const prev = BIBLE_BOOKS[idx - 1];
+    return { id: `${prev.id}.${prev.chapters}`, bookId: prev.id, number: String(prev.chapters) };
+  }
+
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Service class — same public API as the old BibleApiService
+// ---------------------------------------------------------------------------
 
 class BibleApiService {
-  private baseUrl: string;
-  private defaultBibleId: string;
-
-  constructor() {
-    this.baseUrl = BIBLE_API_CONFIG.BASE_URL;
-    this.defaultBibleId = BIBLE_API_CONFIG.DEFAULT_BIBLE_ID;
+  async getBooks(_bibleId?: string): Promise<Book[]> {
+    return BIBLE_BOOKS.map(b => ({
+      id: b.id,
+      bibleId: LOCAL_BIBLE_ID,
+      abbreviation: b.abbreviation,
+      name: b.name,
+      nameLong: b.name,
+    }));
   }
 
-  private async fetchWithTimeout(url: string, options: RequestInit = {}): Promise<Response> {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal,
-      });
-      return response;
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        throw new Error('Request timed out. Please check your internet connection and try again.');
-      }
-      throw err;
-    } finally {
-      clearTimeout(timeoutId);
-    }
+  async getChapters(bookId: string, _bibleId?: string): Promise<Chapter[]> {
+    const info = getBookById(bookId);
+    if (!info) throw new Error(`Unknown book: ${bookId}`);
+    return Array.from({ length: info.chapters }, (_, i) => ({
+      id: `${bookId}.${i + 1}`,
+      bibleId: LOCAL_BIBLE_ID,
+      bookId,
+      number: String(i + 1),
+    }));
   }
 
-  private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const response = await this.fetchWithTimeout(url, options);
-        return response;
-      } catch (err: any) {
-        lastError = err;
-        console.warn(`API request attempt ${attempt + 1} failed:`, err.message);
-        if (attempt < MAX_RETRIES) {
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
-        }
-      }
-    }
-
-    throw lastError || new Error('Network request failed after retries');
-  }
-
-  /**
-   * Get list of available Bibles
-   */
-  async getBibles(): Promise<Bible[]> {
-    try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/bibles`, {
-        headers: getApiHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch Bibles: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching Bibles:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get all books in a Bible
-   */
-  async getBooks(bibleId?: string): Promise<Book[]> {
-    const id = bibleId || this.defaultBibleId;
-    
-    try {
-      const response = await this.fetchWithRetry(`${this.baseUrl}/bibles/${id}/books`, {
-        headers: getApiHeaders(),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch books: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching books:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get all chapters in a specific book
-   */
-  async getChapters(bookId: string, bibleId?: string): Promise<Chapter[]> {
-    const id = bibleId || this.defaultBibleId;
-    
-    try {
-      const response = await this.fetchWithRetry(
-        `${this.baseUrl}/bibles/${id}/books/${bookId}/chapters`,
-        {
-          headers: getApiHeaders(),
-        }
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch chapters: ${response.statusText}`);
-      }
-
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching chapters:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get full chapter content with all verses
-   * This is the main function you'll use to display Bible text
-   */
   async getChapter(
     chapterId: string,
-    bibleId?: string,
-    includeVerseNumbers: boolean = true
+    _bibleId?: string,
+    _includeVerseNumbers: boolean = true,
   ): Promise<ChapterContent> {
-    const id = bibleId || this.defaultBibleId;
-    
-    try {
-      const params = new URLSearchParams({
-        'content-type': 'text',
-        'include-notes': 'false',
-        'include-titles': 'true',
-        'include-chapter-numbers': 'true',
-        'include-verse-numbers': includeVerseNumbers.toString(),
-      });
+    const [bookId, chapterStr] = chapterId.split('.');
+    const chapterNum = parseInt(chapterStr, 10);
 
-      const response = await this.fetchWithRetry(
-        `${this.baseUrl}/bibles/${id}/chapters/${chapterId}?${params.toString()}`,
-        {
-          headers: getApiHeaders(),
-        }
-      );
+    const json = loadBook(bookId);
+    const chapter = json.chapters.find(c => c.chapter === chapterNum);
+    if (!chapter) throw new Error(`Chapter not found: ${chapterId}`);
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Chapter API error ${response.status}: ${errorBody}`);
-        throw new Error(`Failed to fetch chapter (${response.status}): ${response.statusText}`);
-      }
+    const bookInfo = getBookById(bookId);
+    const bookName = bookInfo?.name || ID_TO_FILENAME[bookId] || bookId;
+    const verseTexts = chapter.verses.map(v => `[${v.verse}] ${v.text}`).join('\n');
 
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching chapter:', error);
-      throw error;
-    }
+    return {
+      id: chapterId,
+      bibleId: LOCAL_BIBLE_ID,
+      bookId,
+      number: chapterStr,
+      content: verseTexts,
+      reference: `${bookName} ${chapterNum}`,
+      verseCount: chapter.verses.length,
+      copyright: 'King James Version (1611)',
+      next: getNextChapter(bookId, chapterNum),
+      previous: getPreviousChapter(bookId, chapterNum),
+    };
   }
 
-  /**
-   * Get a specific verse by reference
-   * Example: getVerse('GEN.1.1') returns Genesis 1:1
-   */
-  async getVerse(verseId: string, bibleId?: string): Promise<Verse> {
-    const id = bibleId || this.defaultBibleId;
+  async getVerse(verseId: string, _bibleId?: string): Promise<Verse> {
+    const parts = verseId.split('.');
+    if (parts.length < 3) throw new Error(`Invalid verse ID: ${verseId}`);
 
-    try {
-      const params = new URLSearchParams({
-        'content-type': 'text',
-        'include-notes': 'false',
-        'include-titles': 'false',
-        'include-chapter-numbers': 'false',
-        'include-verse-numbers': 'false',
-      });
+    const bookId = parts[0];
+    const chapterNum = parseInt(parts[1], 10);
+    const verseNum = parseInt(parts[2], 10);
 
-      const response = await this.fetchWithRetry(
-        `${this.baseUrl}/bibles/${id}/verses/${verseId}?${params.toString()}`,
-        {
-          headers: getApiHeaders(),
-        }
-      );
+    const json = loadBook(bookId);
+    const chapter = json.chapters.find(c => c.chapter === chapterNum);
+    if (!chapter) throw new Error(`Chapter not found: ${bookId}.${chapterNum}`);
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error(`Verse API error ${response.status}: ${errorBody}`);
-        throw new Error(`Failed to fetch verse (${response.status}): ${response.statusText}`);
-      }
+    const verse = chapter.verses.find(v => v.verse === verseNum);
+    if (!verse) throw new Error(`Verse not found: ${verseId}`);
 
-      const data = await response.json();
-      return data.data;
-    } catch (error) {
-      console.error('Error fetching verse:', error);
-      throw error;
-    }
+    const bookInfo = getBookById(bookId);
+    const bookName = bookInfo?.name || ID_TO_FILENAME[bookId] || bookId;
+
+    return {
+      id: verseId,
+      bibleId: LOCAL_BIBLE_ID,
+      bookId,
+      chapterId: `${bookId}.${chapterNum}`,
+      reference: `${bookName} ${chapterNum}:${verseNum}`,
+      content: verse.text,
+    };
   }
 
-  /**
-   * Parse chapter content into individual verses
-   * The API returns chapter content as HTML, this parses it into verse objects
-   */
   parseChapterIntoVerses(chapterContent: ChapterContent): Verse[] {
-    const verses: Verse[] = [];
-    const content = chapterContent.content;
+    const [bookId, chapterStr] = chapterContent.id.split('.');
+    const chapterNum = parseInt(chapterStr, 10);
 
-    // Try HTML parsing first (if API returned HTML despite text request)
-    const htmlRegex = /<span data-number="(\d+)"[^>]*>(.*?)<\/span>/gs;
-    let match;
+    const json = loadBook(bookId);
+    const chapter = json.chapters.find(c => c.chapter === chapterNum);
+    if (!chapter) return [];
 
-    while ((match = htmlRegex.exec(content)) !== null) {
-      const verseNum = parseInt(match[1], 10);
-      const verseText = match[2]
-        .replace(/<[^>]+>/g, '')
-        .trim();
+    const bookInfo = getBookById(bookId);
+    const bookName = bookInfo?.name || ID_TO_FILENAME[bookId] || bookId;
 
-      if (verseText) {
-        verses.push({
-          id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
-          bibleId: chapterContent.bibleId,
-          bookId: chapterContent.bookId,
-          chapterId: chapterContent.id,
-          reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
-          content: verseText,
-        });
-      }
-    }
-
-    if (verses.length > 0) return verses;
-
-    // Plain text format: verse numbers appear as [1] or just standalone numbers
-    // Try splitting by [number] pattern first
-    const bracketParts = content.split(/\[(\d+)\]/);
-    if (bracketParts.length > 2) {
-      for (let i = 1; i < bracketParts.length; i += 2) {
-        const verseNum = parseInt(bracketParts[i], 10);
-        const verseText = (bracketParts[i + 1] || '')
-          .replace(/<[^>]+>/g, '')
-          .trim();
-        if (verseText) {
-          verses.push({
-            id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
-            bibleId: chapterContent.bibleId,
-            bookId: chapterContent.bookId,
-            chapterId: chapterContent.id,
-            reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
-            content: verseText,
-          });
-        }
-      }
-      if (verses.length > 0) return verses;
-    }
-
-    // Fallback: split on standalone verse numbers (newline or space then number)
-    const cleanContent = content.replace(/<[^>]+>/g, '').trim();
-    // Match patterns like "\n1 " or beginning "1 "
-    const textParts = cleanContent.split(/(?:^|\n)\s*(\d+)\s+/);
-    if (textParts.length > 2) {
-      for (let i = 1; i < textParts.length; i += 2) {
-        const verseNum = parseInt(textParts[i], 10);
-        const verseText = (textParts[i + 1] || '').replace(/\n/g, ' ').trim();
-        if (verseText) {
-          verses.push({
-            id: `${chapterContent.bookId}.${chapterContent.number}.${verseNum}`,
-            bibleId: chapterContent.bibleId,
-            bookId: chapterContent.bookId,
-            chapterId: chapterContent.id,
-            reference: `${chapterContent.bookId} ${chapterContent.number}:${verseNum}`,
-            content: verseText,
-          });
-        }
-      }
-      if (verses.length > 0) return verses;
-    }
-
-    // Last resort: treat the whole content as one verse
-    const wholeText = cleanContent.trim();
-    if (wholeText) {
-      verses.push({
-        id: `${chapterContent.bookId}.${chapterContent.number}.1`,
-        bibleId: chapterContent.bibleId,
-        bookId: chapterContent.bookId,
-        chapterId: chapterContent.id,
-        reference: `${chapterContent.bookId} ${chapterContent.number}:1`,
-        content: wholeText,
-      });
-    }
-
-    return verses;
+    return chapter.verses.map(v => ({
+      id: `${bookId}.${chapterNum}.${v.verse}`,
+      bibleId: LOCAL_BIBLE_ID,
+      bookId,
+      chapterId: chapterContent.id,
+      reference: `${bookName} ${chapterNum}:${v.verse}`,
+      content: v.text,
+    }));
   }
 
   /**
-   * Helper: Get chapter ID from book and chapter number
-   * Example: getChapterId('GEN', '1') returns 'GEN.1'
+   * Search all loaded Bible text for a query string.
+   * Returns up to `limit` matching verses.
    */
+  searchVerses(query: string, limit: number = 20): Verse[] {
+    const results: Verse[] = [];
+    const lowerQuery = query.toLowerCase();
+
+    for (const bookInfo of BIBLE_BOOKS) {
+      if (results.length >= limit) break;
+      try {
+        const json = loadBook(bookInfo.id);
+        for (const chapter of json.chapters) {
+          if (results.length >= limit) break;
+          for (const v of chapter.verses) {
+            if (results.length >= limit) break;
+            if (v.text.toLowerCase().includes(lowerQuery)) {
+              results.push({
+                id: `${bookInfo.id}.${chapter.chapter}.${v.verse}`,
+                bibleId: LOCAL_BIBLE_ID,
+                bookId: bookInfo.id,
+                chapterId: `${bookInfo.id}.${chapter.chapter}`,
+                reference: `${bookInfo.name} ${chapter.chapter}:${v.verse}`,
+                content: v.text,
+              });
+            }
+          }
+        }
+      } catch {
+        continue;
+      }
+    }
+
+    return results;
+  }
+
   getChapterId(bookId: string, chapterNumber: string): string {
     return `${bookId}.${chapterNumber}`;
   }
 
-  /**
-   * Helper: Get verse ID from book, chapter, and verse number
-   * Example: getVerseId('GEN', '1', '1') returns 'GEN.1.1'
-   */
   getVerseId(bookId: string, chapterNumber: string, verseNumber: string): string {
     return `${bookId}.${chapterNumber}.${verseNumber}`;
   }
 }
 
-// Export singleton instance
 export const bibleApi = new BibleApiService();
-
-// Export for testing/mocking
 export default BibleApiService;

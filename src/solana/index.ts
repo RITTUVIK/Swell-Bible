@@ -21,6 +21,8 @@ export {
   DEFAULT_COMPUTE_UNITS,
   TX_CONFIRMATION_TIMEOUT_MS,
   SOLANA_EXPLORER_URL,
+  STREAK_PROGRAM_ID,
+  STREAK_PROGRAM_ID_ADDRESS,
   getExplorerTxUrl,
   getExplorerAddressUrl,
 } from './config';
@@ -88,6 +90,19 @@ export {
 // =============================================================================
 
 export { transferSwell } from './transfer';
+
+// =============================================================================
+// STREAK PROGRAM
+// =============================================================================
+
+export {
+  fetchStreakAccount,
+  recordAppOnChain,
+  recordGuidedOnChain,
+  getStreakPDA,
+} from './streakProgram';
+
+export type { OnChainStreakData } from './streakProgram';
 
 // =============================================================================
 // UTILITIES
