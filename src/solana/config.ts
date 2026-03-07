@@ -23,16 +23,15 @@ export const SOLANA_CLUSTER = 'mainnet-beta' as const;
 /**
  * RPC endpoint for Solana mainnet.
  *
- * Read from app config (app.config.js injects EXPO_PUBLIC_SOLANA_RPC_URL into extra)
- * so it works on web and native. Set in .env:
- *   EXPO_PUBLIC_SOLANA_RPC_URL=https://mainnet.helius-rpc.com/?api-key=YOUR_KEY
- * The public RPC returns 403 from apps — use a dedicated RPC. Restart dev server after .env changes.
+ * Uses EXPO_PUBLIC_SOLANA_RPC_URL which babel-preset-expo inlines at build time.
+ * Set in .env for local dev, and in eas.json "env" for EAS builds.
+ * Falls back to Constants.expoConfig.extra.solanaRpcUrl, then the public RPC.
  */
 export const SOLANA_RPC_ENDPOINT: string =
+  process.env.EXPO_PUBLIC_SOLANA_RPC_URL ||
   (typeof Constants !== 'undefined' && Constants.expoConfig?.extra?.solanaRpcUrl) ||
-  (typeof process !== 'undefined' && process.env?.EXPO_PUBLIC_SOLANA_RPC_URL) ||
-  (typeof process !== 'undefined' && process.env?.SOLANA_RPC_URL) ||
   clusterApiUrl(SOLANA_CLUSTER);
+
 
 /**
  * Transaction commitment level.

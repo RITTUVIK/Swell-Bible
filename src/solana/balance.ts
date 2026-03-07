@@ -38,9 +38,9 @@ import type { TokenBalance } from './types';
 export async function getSwellBalance(
   walletAddress: PublicKey
 ): Promise<TokenBalance> {
-  const tokenAccountAddress = await getSwellTokenAccountAddress(walletAddress);
-
   try {
+    const tokenAccountAddress = await getSwellTokenAccountAddress(walletAddress);
+
     const connection = getConnection();
     const decimals = await getSwellDecimals();
 
@@ -62,6 +62,7 @@ export async function getSwellBalance(
     };
   } catch (error) {
     if (error instanceof TokenAccountNotFoundError) {
+      const tokenAccountAddress = await getSwellTokenAccountAddress(walletAddress);
       return {
         amount: 0,
         rawAmount: BigInt(0),
@@ -72,6 +73,9 @@ export async function getSwellBalance(
 
     // RPC 403/network errors (e.g. public Solana RPC blocking browser requests):
     // return zero balance so UI still works; set SOLANA_RPC_URL in .env for web.
+    const tokenAccountAddress = await getSwellTokenAccountAddress(walletAddress).catch(
+      () => walletAddress // fallback to wallet address if ATA derivation also fails
+    );
     return {
       amount: 0,
       rawAmount: BigInt(0),

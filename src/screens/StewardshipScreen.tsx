@@ -21,10 +21,9 @@ import {
   disconnectWallet,
   createEmbeddedWallet,
   getEmbeddedSecretKey,
-  saveExternalWallet,
+  saveMwaWallet,
   WalletType,
 } from '../services/walletContext';
-import { connectPhantom, isPhantomInstalled } from '../services/phantomConnect';
 import { PublicKey } from '@solana/web3.js';
 import { getSwellBalance } from '../solana/balance';
 import { getStreakData, migrateStreaksToWallet } from '../services/streaks';
@@ -55,7 +54,7 @@ export default function StewardshipScreen({ navigation }: any) {
   const [balanceError, setBalanceError] = useState(false);
   const [showConnectModal, setShowConnectModal] = useState(false);
   const [creatingWallet, setCreatingWallet] = useState(false);
-  const [connectingPhantom, setConnectingPhantom] = useState(false);
+  const [connectingMwa, setConnectingMwa] = useState(false);
   const [donateModal, setDonateModal] = useState<DonateModalState>({
     visible: false,
     missionTitle: '',
@@ -72,6 +71,7 @@ export default function StewardshipScreen({ navigation }: any) {
   const [backupKeyCopied, setBackupKeyCopied] = useState(false);
   const [disconnectModalVisible, setDisconnectModalVisible] = useState(false);
   const backupKeyRef = useRef<string | null>(null);
+  const mwaConnectingRef = useRef(false);
 
   // Daily reward state (real Vercel-backed system)
   const [rewardClaimable, setRewardClaimable] = useState(false);
@@ -203,6 +203,9 @@ export default function StewardshipScreen({ navigation }: any) {
   };
 
   const loadWallet = async () => {
+    // Skip if MWA connect is in progress — the focus event fires when returning
+    // from the wallet app and would race with handleConnectMwa
+    if (mwaConnectingRef.current) return;
     const wallet = await getSavedWallet();
     if (wallet.connected && wallet.address) {
       setWalletAddress(wallet.address);
@@ -232,9 +235,10 @@ export default function StewardshipScreen({ navigation }: any) {
       const pubkey = new PublicKey(address);
       const result = await getSwellBalance(pubkey);
       setBalance(result.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-    } catch {
-      setBalanceError(true);
-      setBalance(null);
+    } catch (err) {
+      // getSwellBalance should never throw, but guard just in case
+      console.error('[fetchBalance] error:', err);
+      setBalance('0.00');
     } finally {
       setLoadingBalance(false);
     }
@@ -263,25 +267,26 @@ export default function StewardshipScreen({ navigation }: any) {
     }
   }, []);
 
-  // ---- Connect Phantom ----
-  const handleConnectPhantom = useCallback(async () => {
-    setConnectingPhantom(true);
+  // ---- Connect via Mobile Wallet Adapter (Android only) ----
+  const handleConnectMwa = useCallback(async () => {
+    setConnectingMwa(true);
+    mwaConnectingRef.current = true;
     try {
-      const installed = await isPhantomInstalled();
-      if (!installed) {
-        Alert.alert(
-          'Phantom Not Installed',
-          'Phantom wallet needs to be installed on a real Android device (not an emulator).\n\nYou can use "Create New Wallet" instead, or install Phantom from the Google Play Store on a physical device.',
-          [{ text: 'OK' }]
-        );
-        return;
-      }
-      await connectPhantom();
+      const { connectMwa } = require('../services/mwaConnect');
+      const address = await connectMwa();
+      // Validate the address before saving
+      new PublicKey(address);
+      await saveMwaWallet(address);
+      setWalletAddress(address);
+      setWalletType('mwa');
       setShowConnectModal(false);
-    } catch (error) {
-      Alert.alert('Error', 'Failed to open Phantom wallet. Please try again.');
+      // Fetch balance after app resumes — use built-in retry logic
+      setTimeout(() => fetchBalance(address), 1000);
+    } catch (error: any) {
+      Alert.alert('MWA Error', error?.message || 'Failed to connect via Mobile Wallet Adapter.');
     } finally {
-      setConnectingPhantom(false);
+      mwaConnectingRef.current = false;
+      setConnectingMwa(false);
     }
   }, []);
 
@@ -319,6 +324,8 @@ export default function StewardshipScreen({ navigation }: any) {
   const disconnectMessage =
     walletType === 'embedded'
       ? 'Disconnect your wallet? Make sure you have backed up your private key first.'
+      : walletType === 'mwa'
+      ? 'Disconnect your mobile wallet from the app?'
       : 'Remove this wallet connection from the app?';
 
   // ---- Copy Address ----
@@ -442,9 +449,9 @@ export default function StewardshipScreen({ navigation }: any) {
                       <Text style={styles.walletTypeText}>In-App</Text>
                     </View>
                   )}
-                  {walletType === 'external' && (
-                    <View style={[styles.walletTypeBadge, styles.walletTypeBadgeExternal]}>
-                      <Text style={styles.walletTypeText}>Phantom</Text>
+                  {(walletType === 'external' || walletType === 'mwa') && (
+                    <View style={[styles.walletTypeBadge, styles.walletTypeBadgeMwa]}>
+                      <Text style={styles.walletTypeText}>External Wallet</Text>
                     </View>
                   )}
                 </View>
@@ -542,11 +549,6 @@ export default function StewardshipScreen({ navigation }: any) {
                 <ActivityIndicator size="small" color={COLORS.gold} />
                 <Text style={styles.rewardButtonMutedText}>Claiming...</Text>
               </View>
-            ) : walletType === 'external' ? (
-              <View style={[styles.rewardButton, styles.rewardButtonMuted]}>
-                <Ionicons name="flash-outline" size={16} color={COLORS.inkFaint} />
-                <Text style={styles.rewardButtonDisabledText}>Use In-App Wallet to Claim</Text>
-              </View>
             ) : rewardClaimable ? (
               <TouchableOpacity
                 style={[styles.rewardButton, styles.rewardButtonGold]}
@@ -564,7 +566,7 @@ export default function StewardshipScreen({ navigation }: any) {
             )}
 
             {/* Unclaimed past days */}
-            {walletAddress && walletType === 'embedded' && unclaimedDays.length > 0 && !claiming && (
+            {walletAddress && unclaimedDays.length > 0 && !claiming && (
               <View style={styles.rewardUnclaimedSection}>
                 <Text style={styles.rewardUnclaimedLabel}>
                   {unclaimedDays.length} unclaimed day{unclaimedDays.length !== 1 ? 's' : ''} (last 7 days)
@@ -782,7 +784,7 @@ export default function StewardshipScreen({ navigation }: any) {
                 <Ionicons name="add-circle-outline" size={28} color={COLORS.ink} />
               </View>
               <View style={styles.walletOptionContent}>
-                <Text style={styles.walletOptionTitle}>Create New Wallet</Text>
+                <Text style={styles.walletOptionTitle}>Create Wallet</Text>
                 <Text style={styles.walletOptionDesc}>
                   Generate a new Solana wallet right in the app. No other apps needed.
                 </Text>
@@ -794,28 +796,30 @@ export default function StewardshipScreen({ navigation }: any) {
               )}
             </TouchableOpacity>
 
-            {/* Option 2: Connect Phantom */}
-            <TouchableOpacity
-              style={styles.walletOption}
-              activeOpacity={0.7}
-              onPress={handleConnectPhantom}
-              disabled={connectingPhantom}
-            >
-              <View style={[styles.walletOptionIcon, styles.phantomIcon]}>
-                <Ionicons name="flash-outline" size={28} color="#AB9FF2" />
-              </View>
-              <View style={styles.walletOptionContent}>
-                <Text style={styles.walletOptionTitle}>Connect Phantom</Text>
-                <Text style={styles.walletOptionDesc}>
-                  Link your existing Phantom wallet via mobile app.
-                </Text>
-              </View>
-              {connectingPhantom ? (
-                <ActivityIndicator size="small" color="#AB9FF2" />
-              ) : (
-                <Ionicons name="chevron-forward" size={20} color={COLORS.inkFaint} />
-              )}
-            </TouchableOpacity>
+            {/* Option 2: Connect Wallet via MWA (Android only) */}
+            {Platform.OS === 'android' && (
+              <TouchableOpacity
+                style={styles.walletOption}
+                activeOpacity={0.7}
+                onPress={handleConnectMwa}
+                disabled={connectingMwa}
+              >
+                <View style={[styles.walletOptionIcon, styles.mwaIcon]}>
+                  <Ionicons name="wallet-outline" size={28} color={COLORS.gold} />
+                </View>
+                <View style={styles.walletOptionContent}>
+                  <Text style={styles.walletOptionTitle}>Connect Wallet</Text>
+                  <Text style={styles.walletOptionDesc}>
+                    Connect any Solana wallet app installed on this device (Phantom, Solflare, etc.)
+                  </Text>
+                </View>
+                {connectingMwa ? (
+                  <ActivityIndicator size="small" color={COLORS.gold} />
+                ) : (
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.inkFaint} />
+                )}
+              </TouchableOpacity>
+            )}
 
             {/* Divider */}
             <View style={styles.modalDivider} />
@@ -1392,8 +1396,8 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 10,
   },
-  walletTypeBadgeExternal: {
-    backgroundColor: '#AB9FF2',
+  walletTypeBadgeMwa: {
+    backgroundColor: COLORS.gold,
   },
   walletTypeText: {
     fontSize: 9,
@@ -1624,8 +1628,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 12,
   },
-  phantomIcon: {
-    backgroundColor: '#F0EDFF',
+  mwaIcon: {
+    backgroundColor: '#FFF8E8',
   },
   walletOptionContent: {
     flex: 1,

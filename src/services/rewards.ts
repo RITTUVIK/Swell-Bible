@@ -123,9 +123,17 @@ async function signClaimMessage(walletAddress: string, date: string): Promise<st
     return Buffer.from(sig).toString('base64');
   }
 
-  // External wallets: sign with a dummy for now
-  // Full Phantom deeplink signing would require a round-trip flow
-  // For hackathon, external wallets are not supported for claims
+  if (wallet.type === 'mwa' || wallet.type === 'external') {
+    try {
+      const { signMessageMwa } = require('./mwaConnect');
+      const message = `swell:claim:${walletAddress}:${date}`;
+      return await signMessageMwa(message);
+    } catch (err) {
+      console.error('[rewards] MWA sign failed:', err);
+      return null;
+    }
+  }
+
   return null;
 }
 
@@ -139,7 +147,7 @@ export async function claimReward(walletAddress: string, date?: string): Promise
   // Sign the claim message
   const walletSignature = await signClaimMessage(walletAddress, claimDate);
   if (!walletSignature) {
-    return { success: false, error: 'Could not sign claim. Only embedded wallets can claim rewards.' };
+    return { success: false, error: 'Could not sign claim. Please approve the signing request in your wallet app, or try disconnecting and reconnecting.' };
   }
 
   try {

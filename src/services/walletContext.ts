@@ -6,7 +6,7 @@ import type { WalletSigner } from '../solana/types';
 const WALLET_KEY = 'swell_bible_wallet';
 const KEYPAIR_KEY = 'swell_bible_keypair';
 
-export type WalletType = 'embedded' | 'external';
+export type WalletType = 'embedded' | 'external' | 'mwa';
 
 export interface WalletState {
   address: string | null;
@@ -36,6 +36,15 @@ export async function saveWallet(address: string, type: WalletType = 'external')
 }
 
 export async function disconnectWallet(): Promise<void> {
+  const wallet = await getSavedWallet();
+  if (wallet.type === 'mwa') {
+    try {
+      const { disconnectMwa } = require('./mwaConnect');
+      disconnectMwa();
+    } catch {
+      // MWA module not available (iOS/web) — ignore
+    }
+  }
   await AsyncStorage.removeItem(WALLET_KEY);
   // Don't remove keypair on disconnect — user might reconnect
 }
@@ -136,4 +145,40 @@ export async function deleteEmbeddedWallet(): Promise<void> {
  */
 export async function saveExternalWallet(address: string): Promise<void> {
   await saveWallet(address, 'external');
+}
+
+// =============================================================================
+// MWA WALLET (MOBILE WALLET ADAPTER — ANDROID ONLY)
+// =============================================================================
+
+/**
+ * Save an MWA-connected wallet address.
+ */
+export async function saveMwaWallet(address: string): Promise<void> {
+  await saveWallet(address, 'mwa');
+}
+
+/**
+ * Get the appropriate WalletSigner for the currently connected wallet.
+ * Works for embedded keypairs and MWA wallets.
+ */
+export async function getActiveSigner(): Promise<WalletSigner | null> {
+  const wallet = await getSavedWallet();
+  if (!wallet.connected || !wallet.address) return null;
+
+  if (wallet.type === 'embedded') {
+    return getEmbeddedSigner();
+  }
+
+  if (wallet.type === 'mwa') {
+    try {
+      const { getMwaSigner } = require('./mwaConnect');
+      return getMwaSigner(wallet.address);
+    } catch {
+      return null;
+    }
+  }
+
+  // External wallets don't support signing through the app
+  return null;
 }

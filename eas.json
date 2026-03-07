@@ -6,11 +6,19 @@
     "preview": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=6ddeae02-5fc6-4d62-91e8-84baa3080e07",
+        "EXPO_PUBLIC_REWARDS_API_URL": "https://swell-rewards-server.vercel.app"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_SOLANA_RPC_URL": "https://mainnet.helius-rpc.com/?api-key=6ddeae02-5fc6-4d62-91e8-84baa3080e07",
+        "EXPO_PUBLIC_REWARDS_API_URL": "https://swell-rewards-server.vercel.app"
       }
     }
   },

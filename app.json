@@ -7,9 +7,19 @@
     "scheme": "swellbible",
     "userInterfaceStyle": "light",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#6B46C1"
     },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "backgroundColor": "#6B46C1"
+        }
+      ]
+    ],
     "assetBundlePatterns": [
       "**/*"
     ],
