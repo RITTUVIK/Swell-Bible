@@ -6,6 +6,16 @@ A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, 
 
 [**Download APK**](https://github.com/RITTUVIK/Swell-Bible/releases/tag/v1.0.0)
 
+## Pitch Deck
+
+<div align="center">
+
+[![Watch the Pitch Deck](https://img.youtube.com/vi/xuUZiUmQIcg/maxresdefault.jpg)](https://www.youtube.com/watch?v=xuUZiUmQIcg)
+
+**[Watch the Pitch Deck on YouTube](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
+
+</div>
+
 ## Overview
 
 SWELL Bible is a cross-platform (Android and IOS) app that combines daily Bible reading with Solana. It was built for the **Solana Seeker Phone** and the **Monolith hackathon**. The app supports multiple wallet options (embedded wallet, Phantom deep link, Mobile Wallet Adapter on Android), plus a focused feature set: Bible, progress, streaks, and SWELL token flows.
