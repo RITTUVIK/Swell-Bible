@@ -12,7 +12,7 @@ A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, 
 
 [![Watch the Pitch Deck](https://img.youtube.com/vi/xuUZiUmQIcg/maxresdefault.jpg)](https://www.youtube.com/watch?v=xuUZiUmQIcg)
 
-**[Watch the Pitch Deck on YouTube](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
+**[See SWELL Bible in Action](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
 
 </div>
 
