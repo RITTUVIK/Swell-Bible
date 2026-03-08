@@ -2,13 +2,13 @@
 
 A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, track streaks, and earn SWELL on-chain. Built for the Solana Seeker Phone and Monolith hackathon.
 
-## Pitch Deck
+## Pitch Deck & Demo
 
 <div align="center">
 
-[![Watch the Pitch Deck](https://img.youtube.com/vi/xuUZiUmQIcg/maxresdefault.jpg)](https://www.youtube.com/watch?v=xuUZiUmQIcg)
+[![Watch the Pitch Deck & Demo](https://img.youtube.com/vi/xuUZiUmQIcg/maxresdefault.jpg)](https://www.youtube.com/watch?v=xuUZiUmQIcg)
 
-**[See SWELL Bible in Action](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
+**[Watch the Pitch Deck & Demo](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
 
 </div>
 
@@ -18,7 +18,7 @@ A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, 
 
 ## Overview
 
-SWELL Bible is a cross-platform (Android and IOS) app that combines daily Bible reading with Solana. It was built for the **Solana Seeker Phone** and the **Monolith hackathon**. The app supports multiple wallet options (embedded wallet, Phantom deep link, Mobile Wallet Adapter on Android), plus a focused feature set: Bible, progress, streaks, and SWELL token flows.
+SWELL Bible is an Android-first mobile app that combines daily Bible reading with Solana. Built for the **Solana Seeker Phone** and the **Monolith hackathon**, the SWELL token is live on **Solana mainnet-beta**. The app supports multiple wallet options (embedded wallet, Phantom deep link, Mobile Wallet Adapter on Android), plus a focused feature set: Bible, progress, streaks, and SWELL token flows.
 
 **Core principles:** Solana Mobile native with full MWA support on Android. Multiple wallet options. Focused scope, no feature bloat.
 
@@ -62,7 +62,7 @@ SWELL Bible is a cross-platform (Android and IOS) app that combines daily Bible 
 **1. Clone and install**
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/RITTUVIK/Swell-Bible.git
 cd Swell-Bible
 npm install
 ```
@@ -76,7 +76,6 @@ Create a `.env` in the project root. Required: `EXPO_PUBLIC_SOLANA_RPC_URL` (e.g
 ```bash
 npm start
 npm run android   # Android
-npm run web       # Web
 ```
 
 **4. Native build (for MWA)**
@@ -120,6 +119,7 @@ Swell-Bible/
 │   │   ├── bibleApi.ts          # Local KJV JSON reader (no external API)
 │   │   ├── bibleStorage.ts
 │   │   ├── bookmarks.ts
+│   │   ├── dailyReward.ts
 │   │   ├── readingProgress.ts
 │   │   ├── rewards.ts
 │   │   ├── streaks.ts
@@ -142,7 +142,13 @@ Swell-Bible/
 ├── swell-rewards-server/
 │   ├── api/claim-reward.ts
 │   ├── api/claim-history.ts
-│   └── lib/claimStore.ts
+│   └── lib/
+│       ├── claimStore.ts
+│       ├── rateLimit.ts
+│       └── treasury.ts
+├── programs/swell-streak/       # Anchor on-chain streak tracking
+│   ├── src/lib.rs
+│   └── Anchor.toml
 └── README.md
 ```
 
@@ -167,7 +173,9 @@ Unclaimed days within the last 7 can be claimed retroactively.
 
 ## Solana Module
 
-`src/solana/` exposes wallet-agnostic SWELL logic: balance, transfers, ATA resolution, and a `WalletSigner` interface used by both embedded wallet and MWA.
+`src/solana/` exposes wallet-agnostic SWELL logic: balance, transfers, ATA resolution, and a `WalletSigner` interface used by both embedded wallet and MWA. The SWELL token is deployed on **Solana mainnet-beta**.
+
+`programs/swell-streak/` is an Anchor (Rust) on-chain program for verifiable streak tracking — recording daily app activity and guided reflections to a PDA per wallet.
 
 ## Building
 
