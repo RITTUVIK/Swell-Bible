@@ -2,10 +2,6 @@
 
 A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, track streaks, and earn SWELL on-chain. Built for the Solana Seeker Phone and Monolith hackathon.
 
-## Download
-
-[**Download APK**](https://github.com/RITTUVIK/Swell-Bible/releases/tag/v1.0.0)
-
 ## Pitch Deck
 
 <div align="center">
@@ -15,6 +11,10 @@ A mobile Bible app with Solana-based SWELL token rewards. Read Scripture daily, 
 **[See SWELL Bible in Action](https://www.youtube.com/watch?v=xuUZiUmQIcg)**
 
 </div>
+
+## Download
+
+[**Download APK**](https://github.com/RITTUVIK/Swell-Bible/releases/tag/v1.0.0)
 
 ## Overview
 
